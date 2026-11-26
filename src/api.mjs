@@ -365,7 +365,70 @@ function formatCompactAge(isoTimestamp) {
   return `${Math.floor(diffHr / 24)}d ago`;
 }
 
+// Read-only paths worth caching in the colo cache. A Cache Rule alone does not
+// cache a Worker's response, so the Worker has to put it there itself.
+const EDGE_CACHE_TTL = Object.freeze({
+  "/api/v1/status": 15,
+  "/api/v1/resets": 60,
+  "/api/v1/badge.svg": 60,
+  "/feed.xml": 60,
+  "/rss.xml": 60,
+});
+
+/**
+ * Serve a GET from the colo cache when possible. Keys on the full URL, so
+ * query variants (type, limit) cache separately. Failures here must never take
+ * the route down: any cache error falls through to the live handler.
+ * @param {Request} request
+ * @param {number} ttl seconds
+ * @param {() => Promise<Response>} build
+ * @returns {Promise<Response>}
+ */
+async function edgeCached(request, ttl, build) {
+  if (typeof caches === "undefined" || request.method !== "GET") return build();
+  const cache = caches.default;
+  const key = new Request(request.url, { method: "GET" });
+
+  try {
+    const hit = await cache.match(key);
+    if (hit) {
+      const headers = new Headers(hit.headers);
+      headers.set("X-Edge-Cache", "HIT");
+      return new Response(hit.body, { status: hit.status, headers });
+    }
+  } catch {
+    // fall through to the live handler
+  }
+
+  const response = await build();
+  if (response.status !== 200) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", `public, max-age=${ttl}, s-maxage=${ttl}`);
+  headers.set("X-Edge-Cache", "MISS");
+  const body = await response.arrayBuffer();
+  const cacheable = new Response(body, { status: 200, headers });
+  try {
+    await cache.put(key, new Response(body, { status: 200, headers }));
+  } catch {
+    // a cache write failure must not fail the response
+  }
+  return cacheable;
+}
+
 export async function handleApiRequest(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+
+  const ttl = EDGE_CACHE_TTL[pathname];
+  if (ttl && request.method === "GET") {
+    return edgeCached(request, ttl, () => handleApiRequestUncached(request, env));
+  }
+
+  return handleApiRequestUncached(request, env);
+}
+
+async function handleApiRequestUncached(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
 

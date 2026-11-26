@@ -67,3 +67,60 @@ test("HEAD on a no-store page still says no-store", async () => {
   assert.equal(await res.text(), "");
   assert.equal(res.headers.get("cache-control"), "no-store");
 });
+
+test("a second read is served from the colo cache", async (t) => {
+  // A Cache Rule alone does not cache a Worker response, so the Worker puts it
+  // in caches.default itself. This pins that it actually consults it.
+  const entries = new Map();
+  globalThis.caches = {
+    default: {
+      async match(key) {
+        const hit = entries.get(key.url);
+        return hit ? hit.clone() : undefined;
+      },
+      async put(key, response) {
+        entries.set(key.url, response.clone());
+      },
+    },
+  };
+  t.after(() => {
+    delete globalThis.caches;
+  });
+
+  const first = await worker.fetch(new Request(`${SITE}/api/v1/status`), {});
+  assert.equal(first.headers.get("x-edge-cache"), "MISS");
+  assert.equal((await first.json()).service, "antigravity-resets");
+
+  const second = await worker.fetch(new Request(`${SITE}/api/v1/status`), {});
+  assert.equal(second.headers.get("x-edge-cache"), "HIT");
+  assert.equal((await second.json()).service, "antigravity-resets");
+});
+
+test("write routes never consult the colo cache", async (t) => {
+  const entries = new Map();
+  let lookups = 0;
+  globalThis.caches = {
+    default: {
+      async match(key) {
+        lookups += 1;
+        return entries.get(key.url);
+      },
+      async put(key, response) {
+        entries.set(key.url, response);
+      },
+    },
+  };
+  t.after(() => {
+    delete globalThis.caches;
+  });
+
+  await worker.fetch(
+    new Request(`${SITE}/api/v1/thanks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delta: 1 }),
+    }),
+    {},
+  );
+  assert.equal(lookups, 0);
+});
