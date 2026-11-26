@@ -68,7 +68,7 @@ const UI_COPY_TARGETS = Object.freeze([
 /**
  * @param {Array<{q: string, a: string}>} entries
  */
-function renderFaqHtml(entries) {
+export function renderFaqHtml(entries) {
   return entries
     .map((item, idx) => {
       const open = idx === 0;
@@ -91,7 +91,7 @@ function renderFaqHtml(entries) {
  * @param {Array<object>} resets
  * @param {string} lang
  */
-function renderAnnouncementsHtml(resets, lang) {
+export function renderAnnouncementsHtml(resets, lang) {
   const copy = copyFor(lang);
   return resets
     .map((item) => {
@@ -141,7 +141,7 @@ function renderLangLinksHtml(lang) {
  * @param {object} data
  * @param {string} lang
  */
-function renderHeadExtras(data, lang) {
+export function buildHeadHtml(data, lang, faqEntries) {
   const canonical = langUrl(lang);
   const alternates = [
     ...LANG_CODES.map(
@@ -160,7 +160,7 @@ function renderHeadExtras(data, lang) {
     }" />`,
     `<link rel="alternate" type="text/plain" title="llms.txt" href="${SITE_ORIGIN}/llms.txt" />`,
     `<meta property="og:locale" content="${OG_LOCALE[lang] || "en_US"}" />`,
-    renderJsonLdScript(data, lang),
+    renderJsonLdScript(data, lang, faqEntries),
   ].join("");
 }
 
@@ -185,12 +185,14 @@ export async function handleHtmlRequest(request, env, lang) {
   shellHeaders.delete("if-modified-since");
   shellHeaders.delete("range");
 
-  const assetResponse = await env.ASSETS.fetch(
-    new Request(assetUrl, { method: "GET", headers: shellHeaders }),
-  );
+  // The shell fetch and the data read are independent: run them together so
+  // TTFB reflects the slower one instead of their sum.
+  const [assetResponse, data] = await Promise.all([
+    env.ASSETS.fetch(new Request(assetUrl, { method: "GET", headers: shellHeaders })),
+    loadSeoData(env),
+  ]);
   if (assetResponse.status !== 200) return assetResponse;
 
-  const data = await loadSeoData(env);
   const meta = pageMeta(lang);
   const copy = copyFor(lang);
   const latest = data.stats.latest;
@@ -266,7 +268,7 @@ export async function handleHtmlRequest(request, env, lang) {
     })
     .on("head", {
       element(el) {
-        el.append(renderHeadExtras(data, lang), { html: true });
+        el.append(buildHeadHtml(data, lang, faqEntries), { html: true });
       },
     })
     .on("#emailInput", {

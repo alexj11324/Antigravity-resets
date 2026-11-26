@@ -227,8 +227,8 @@ export async function recordWebhookEventAndResets(
   const inserted = [];
   const insertReset = db.prepare(
     `INSERT OR IGNORE INTO resets
-      (id, tweet_id, timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, tweet_id, timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source, quote_text)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
   for (const item of classifiedResets) {
@@ -247,6 +247,7 @@ export async function recordWebhookEventAndResets(
         item.judgeSummary ? JSON.stringify(item.judgeSummary) : null,
         0,
         item.source || "x_webhook_joint_ai",
+        item.quoteText ?? "",
       )
       .run();
     const changes = res?.meta?.changes ?? 0;
@@ -270,8 +271,8 @@ export async function recordWebhookEventAndResets(
   if (announcedResets.length > 0) {
     const insertAnnouncement = db.prepare(
       `INSERT OR IGNORE INTO announced_resets
-        (id, tweet_id, announced_at, expected_by, type, author_handle, author_name, url, quote_text, updates_json, summary_i18n_json, judge_summary_json, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, tweet_id, announced_at, expected_by, type, author_handle, author_name, url, quote_text, updates_json, summary_i18n_json, judge_summary_json, status, telegram_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
     );
     for (const ann of announcedResets) {
       const annStatus = ann.status === "possible" ? "possible" : "expected";
@@ -305,38 +306,33 @@ export async function recordWebhookEventAndResets(
             existing.updates.some((u) => u.tweetId === ann.tweetId);
           if (alreadyHas) continue;
 
-          const nextUpdates = [
-            ...existing.updates,
-            {
-              tweetId: ann.tweetId,
-              announcedAt: ann.announcedAt,
-              authorHandle: ann.authorHandle,
-              authorName: ann.authorName,
-              url: ann.url,
-              quoteText: ann.quoteText,
-            },
-          ];
-          const nextExpectedBy = ann.expectedBy || existing.expectedBy || null;
-          await db
-            .prepare(
-              "UPDATE announced_resets SET updates_json = ?, expected_by = ?, url = ?, announced_at = ? WHERE id = ?",
-            )
-            .bind(
-              JSON.stringify(nextUpdates),
-              nextExpectedBy,
-              ann.url,
-              ann.announcedAt,
-              existing.id,
-            )
-            .run();
-          insertedAnnouncements.push({
-            ...existing,
-            updates: nextUpdates,
-            expectedBy: nextExpectedBy,
-            url: ann.url,
+          // Append against the current row in SQLite, not the earlier read:
+          // concurrent webhook updates must not erase one another's quotes.
+          const update = {
+            tweetId: ann.tweetId,
             announcedAt: ann.announcedAt,
-            isUpdate: true,
-          });
+            authorHandle: ann.authorHandle,
+            authorName: ann.authorName,
+            url: ann.url,
+            quoteText: ann.quoteText,
+          };
+          const updatedRaw = await db
+            .prepare(
+              `UPDATE announced_resets SET
+                updates_json = json_insert(updates_json, '$[#]', json(?)),
+                expected_by = COALESCE(?, expected_by), url = ?, announced_at = ?,
+                telegram_revision = telegram_revision + 1
+               WHERE id = ? AND status = 'possible' AND NOT EXISTS (
+                 SELECT 1 FROM json_each(announced_resets.updates_json) AS watch_update
+                 WHERE json_extract(watch_update.value, '$.tweetId') = ?
+               ) RETURNING *`,
+            )
+            .bind(JSON.stringify(update), ann.expectedBy || null, ann.url,
+              ann.announcedAt, existing.id, ann.tweetId)
+            .first();
+          if (updatedRaw) {
+            insertedAnnouncements.push({ ...rowToAnnouncement(updatedRaw), isUpdate: true });
+          }
           continue;
         }
       }

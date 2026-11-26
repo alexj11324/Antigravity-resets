@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import test from "node:test";
 import { parseWebhookPayload } from "../src/reset-classifier.mjs";
 import worker from "../src/x-webhook.mjs";
-import { createMemoryD1 } from "../scripts/memory-d1.mjs";
+import { createMemoryD1 } from "./sqlite-d1.mjs";
 
 const AUTHOR_ID = "1086145626633494528";
 const SECRET = "test_x_author_fallback_secret";

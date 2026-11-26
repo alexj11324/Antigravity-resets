@@ -3,6 +3,9 @@
   "name": "antigravity-resets",
   "main": "src/index.mjs",
   "compatibility_date": "2026-11-01",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "observability": {
     "enabled": true
   },

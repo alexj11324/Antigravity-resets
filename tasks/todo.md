@@ -68,3 +68,17 @@
    与链接语法转义；清理死代码（`ag_resets_locale`、`escapeXml`、过时注释）。
 4. **产品反馈**：删除了多余的「Did Antigravity reset today?」独立卡片区块——codex-resets 没有
    这个块，且 FAQ 首问已含实时答案，公告列表也已全量 SSR。
+5. **测试覆盖缺口**（review 第 7 条）：HTML 渲染此前完全无自动化测试。已导出
+   `buildHeadHtml` / `renderFaqHtml` / `renderAnnouncementsHtml`，新增 `test/seo-render.test.mjs`
+   5 项（head 标签不重复、JSON-LD 可解析且不被 `</script>` 突破、FAQ 首项展开、非 https 链接被丢弃）。
+
+## 安全审查修复
+1. **退订越权 / CSRF**：`GET /api/v1/unsubscribe?email=victim@x.com` 原本能退订任意邮箱，且响应
+   里的 `removed` 会泄露该地址是否订阅。改为 HMAC(email) 签名 token：订阅响应返回
+   `unsubscribeUrl`，退订必须携带并恒时比对；未配置 secret 返回 503；响应统一 `{ ok: true }`
+   不再泄露存在性。邮件里的退订链接同步签名（`src/x-webhook.mjs`）。
+2. **`readJsonBody` 先缓冲后限流**：原实现 `await request.text()` 会把整个 body 读进内存后
+   才判断大小。改为先看 `Content-Length`，再流式读取、超限立即 `cancel()`。
+3. **Judge prompt injection**：父帖/引用帖文本原本作为普通行拼进 prompt。改为 `<<<PARENT_BEGIN>>>`
+   等显式不可信分隔符包裹，并在 Tier-1 与 Tier-2 两处 system instruction 中要求不得执行其中
+   指令、结论只能基于官方账号自己的 POST 正文。

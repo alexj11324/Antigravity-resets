@@ -1,5 +1,6 @@
 import { handleApiRequest } from "./api.mjs";
 import { handleXWebhook } from "./x-webhook.mjs";
+import { drainTelegramOutbox } from "./telegram-outbox.mjs";
 import { langFromPath } from "./seo-data.mjs";
 import { handleHtmlRequest } from "./seo-html.mjs";
 import {
@@ -24,6 +25,10 @@ function redirectStatus(request) {
 }
 
 export default {
+  async scheduled(_controller, env) {
+    const result = await drainTelegramOutbox(env);
+    if (result.error) throw new Error("Telegram outbox drain failed");
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const { pathname } = url;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
 import worker from "../src/index.mjs";
-import { createMemoryD1 } from "../scripts/memory-d1.mjs";
+import { createMemoryD1 } from "./sqlite-d1.mjs";
 
 const OAUTH2_SECRET = "test_oauth2_client_secret_value";
 const LEGACY_SECRET = "test_legacy_api_key_secret_value";
@@ -815,6 +815,8 @@ test("Reply 'Done' passes parent post text, author, and URL separately from quot
   assert.equal(explicitJson.resetsRecorded, 1);
   assert.equal(explicitJson.classification, "regular");
   assert.equal(telegramCalls.length, 1);
+  assert.match(telegramCalls[0].body.text, /<blockquote>Done<\/blockquote>\n- Varun/);
+  assert.doesNotMatch(telegramCalls[0].body.text, /Varun Mohan confirmed a Gemini quota reset/);
 
   // Verify BOTH models received separate parent post (text, author, URL) and quoted post sections
   assert.equal(calls.length, 2);
@@ -1260,9 +1262,9 @@ test("Invalid webhook signature returns 401 without calling models or writing to
   assert.equal(db._tables.webhookEvents.size, 0);
 });
 
-test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and email unsubscribe", async () => {
+test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and signed email unsubscribe", async () => {
   const db = createMemoryD1();
-  const env = { DB: db };
+  const env = { DB: db, EMAIL_UNSUBSCRIBE_SECRET: "test-unsubscribe-secret" };
 
   const feedRes = await worker.fetch(new Request("https://antigravity-resets.com/feed.xml"), env);
   assert.equal(feedRes.status, 200);
@@ -1288,13 +1290,38 @@ test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and email u
     env,
   );
   assert.equal(subRes.status, 201);
+  const subBody = await subRes.json();
+  assert.ok(subBody.unsubscribeUrl, "subscribe must return a signed unsubscribe URL");
+  assert.match(subBody.unsubscribeUrl, /token=/);
 
-  const unsubRes = await worker.fetch(
+  // A bare email in the query string must not be enough to unsubscribe someone.
+  const unsigned = await worker.fetch(
     new Request("https://antigravity-resets.com/api/v1/unsubscribe?email=user%40example.com"),
     env,
   );
+  assert.equal(unsigned.status, 403);
+
+  const forged = await worker.fetch(
+    new Request("https://antigravity-resets.com/api/v1/unsubscribe?email=user%40example.com&token=abc"),
+    env,
+  );
+  assert.equal(forged.status, 403);
+
+  const unsubRes = await worker.fetch(new Request(subBody.unsubscribeUrl), env);
   assert.equal(unsubRes.status, 200);
-  assert.equal((await unsubRes.json()).removed, true);
+  const unsubBody = await unsubRes.json();
+  assert.equal(unsubBody.ok, true);
+  // Never disclose whether the address was subscribed.
+  assert.equal(unsubBody.removed, undefined);
+});
+
+test("Unsubscribe refuses to run when no signing secret is configured", async () => {
+  const db = createMemoryD1();
+  const res = await worker.fetch(
+    new Request("https://antigravity-resets.com/api/v1/unsubscribe?email=a%40b.com&token=x"),
+    { DB: db },
+  );
+  assert.equal(res.status, 503);
 });
 
 test("X API v2 auto-hydrates missing parent post for 'Done' via X_BEARER_TOKEN so Tier-1 approves unanimously", async () => {
@@ -1325,7 +1352,7 @@ test("X API v2 auto-hydrates missing parent post for 'Done' via X_BEARER_TOKEN s
       const body = JSON.parse(init.body);
       if (body.chat_id === "-100ADMIN") adminTgCalls.push(body);
       else publicTgCalls.push(body);
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, result: { message_id: 700 + publicTgCalls.length + adminTgCalls.length } });
     }
     const body = JSON.parse(init.body);
     judgeInputs.push({ url: urlStr, model: body.model, input: body.input });
@@ -1426,7 +1453,7 @@ test("Tier-2 gemini-4-neon arbitrator resolves type disagreement when confident,
       const body = JSON.parse(init.body);
       if (body.chat_id === "-100ADMIN") adminTgCalls.push(body);
       else publicTgCalls.push(body);
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, result: { message_id: 700 + publicTgCalls.length + adminTgCalls.length } });
     }
     const body = JSON.parse(init.body);
     if (urlStr.includes("/v1beta/decisions")) {
@@ -1767,7 +1794,7 @@ test("Codex-style HTML Telegram templates & ETA lifecycle: possible watch -> Upd
   assert.equal(tgCalls[0].method, "sendMessage");
   assert.equal(tgCalls[0].body.parse_mode, "HTML");
   assert.match(tgCalls[0].body.text, /⚠️ <b>Possible Antigravity reset<\/b>/);
-  assert.match(tgCalls[0].body.text, /<blockquote>It's been a while without resets.* - Varun<\/blockquote>/);
+  assert.match(tgCalls[0].body.text, /<blockquote>It's been a while without resets.*<\/blockquote>\n- Varun/);
   assert.match(tgCalls[0].body.text, /Track this watch on <a href="https:\/\/antigravity-resets\.com">antigravity-resets\.com<\/a>/);
 
   // 2. Possible Watch Update #2 -> edits existing Telegram message in-place with `<i>Update:</i>` + ETA!
@@ -1789,7 +1816,7 @@ test("Codex-style HTML Telegram templates & ETA lifecycle: possible watch -> Upd
   assert.equal(tgCalls[1].method, "editMessageText");
   assert.equal(tgCalls[1].body.message_id, 771);
   assert.match(tgCalls[1].body.text, /⚠️ <b>Possible Antigravity reset by Nov 13, 08:00 UTC<\/b>/);
-  assert.match(tgCalls[1].body.text, /<i>Update:<\/i>\n<blockquote>Thursday is feeling good.* - Varun<\/blockquote>/);
+  assert.match(tgCalls[1].body.text, /<i>Update:<\/i>\n<blockquote>Thursday is feeling good.*<\/blockquote>\n- Varun/);
 
   // 3. Expected Reset WITH concrete ETA -> `🗓 Antigravity reset expected by Oct 28, 07:00 UTC`
   const resEta = await worker.fetch(
@@ -1811,7 +1838,7 @@ test("Codex-style HTML Telegram templates & ETA lifecycle: possible watch -> Upd
   assert.equal(etaJson.resetsRecorded, 0);
   assert.equal(tgCalls[2].method, "sendMessage");
   assert.match(tgCalls[2].body.text, /🗓 <b>Antigravity reset expected by Oct 28, 07:00 UTC<\/b>/);
-  assert.match(tgCalls[2].body.text, /<blockquote>Lands by midnight PST\. - Varun<\/blockquote>/);
+  assert.match(tgCalls[2].body.text, /<blockquote>Lands by midnight PST\.<\/blockquote>\n- Varun/);
   assert.match(tgCalls[2].body.text, /Track the announced reset on <a href="https:\/\/antigravity-resets\.com">antigravity-resets\.com<\/a>/);
 
   // Status API exposes upcomingReset
@@ -1854,7 +1881,7 @@ test("Codex-style HTML Telegram templates & ETA lifecycle: possible watch -> Upd
   await wu.flush();
   assert.equal((await resConf.json()).resetsRecorded, 1);
   assert.match(tgCalls[4].body.text, /✅ <b>Antigravity reset confirmed<\/b>/);
-  assert.match(tgCalls[4].body.text, /<blockquote>Antigravity usage limits have been reset\. Check your limits\. - Varun<\/blockquote>/);
+  assert.match(tgCalls[4].body.text, /<blockquote>Antigravity usage limits have been reset\. Check your limits\.<\/blockquote>\n- Varun/);
   assert.match(tgCalls[4].body.text, /Tracked by <a href="https:\/\/antigravity-resets\.com">antigravity-resets\.com<\/a>/);
 
   const statusAfterConfirmed = await (
@@ -1911,7 +1938,7 @@ test("Confirmed and expected Telegram response failures are logged safely while 
         assert.equal(log.mock.calls.length, 0, "Rejected sends must not log success");
         const text = error.mock.calls[0].arguments[0];
         assert.ok(!text.includes(env.TELEGRAM_BOT_TOKEN));
-        assert.equal(JSON.parse(text).event, stage === "confirmed" ? "telegram_notify_failed" : "telegram_expected_notify_failed");
+        assert.equal(JSON.parse(text).event, "telegram_outbox_delivery");
         if (stage === "expected") {
           const status = await (await worker.fetch(new Request("https://antigravity-resets.com/api/v1/status"), env)).json();
           assert.equal(status.upcomingReset.telegramMessageId, null, "API rejection must not persist a message ID");
@@ -1921,7 +1948,7 @@ test("Confirmed and expected Telegram response failures are logged safely while 
   }
 });
 
-test("Telegram edit API rejection is logged and falls back to a new watch message", async (t) => {
+test("Telegram edit API rejection is durable without creating a duplicate watch message", async (t) => {
   const error = t.mock.method(console, "error", () => {});
   t.mock.method(console, "log", () => {});
   const methods = [];
@@ -1940,10 +1967,10 @@ test("Telegram edit API rejection is logged and falls back to a new watch messag
     await wu.flush();
     assert.equal((await response.json()).expectedRecorded, 1);
   }
-  assert.deepEqual(methods, ["sendMessage", "editMessageText", "sendMessage"]);
-  assert.equal(JSON.parse(error.mock.calls[0].arguments[0]).event, "telegram_expected_edit_failed");
+  assert.deepEqual(methods, ["sendMessage", "editMessageText"]);
+  assert.equal(JSON.parse(error.mock.calls[0].arguments[0]).event, "telegram_outbox_delivery");
   const status = await (await worker.fetch(new Request("https://antigravity-resets.com/api/v1/status"), env)).json();
-  assert.equal(status.upcomingReset.telegramMessageId, "703");
+  assert.equal(status.upcomingReset.telegramMessageId, "701");
 });
 
 test("Replaying a watch update after confirmation cannot resurrect the watch or broadcast again", async (t) => {

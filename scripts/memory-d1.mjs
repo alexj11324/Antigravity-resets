@@ -32,6 +32,7 @@ export function createMemoryD1() {
         judge_summary_json,
         thanks_count,
         source,
+        quote_text,
       ] = params;
 
       const ignore = /^INSERT OR IGNORE/i.test(q);
@@ -53,6 +54,7 @@ export function createMemoryD1() {
         judge_summary_json,
         thanks_count: Number(thanks_count || 0),
         source,
+        quote_text: quote_text ?? null,
       };
       resets.set(id, row);
       if (tweet_id) resetsByTweetId.set(tweet_id, id);
@@ -132,6 +134,7 @@ export function createMemoryD1() {
         status: status || "expected",
         confirmed_reset_id: null,
       };
+      row.telegram_revision = /telegram_revision/i.test(q) ? 1 : 0;
       announcedResets.set(id, row);
       if (tweet_id) announcedByTweetId.set(tweet_id, id);
       return { meta: { changes: 1 } };
@@ -157,6 +160,21 @@ export function createMemoryD1() {
         JSON.parse(item.updates_json || "[]").some((update) => update.tweetId === params[1]));
       const first = row ? { id: row.id } : null;
       return { first, results: first ? [first] : [] };
+    }
+
+    if (/^UPDATE announced_resets SET updates_json = json_insert/i.test(q)) {
+      const [updateJson, expectedBy, url, announcedAt, id, tweetId] = params;
+      const row = announcedResets.get(id);
+      const updates = row ? JSON.parse(row.updates_json || "[]") : [];
+      if (!row || row.status !== "possible" || updates.some((update) => update.tweetId === tweetId)) {
+        return { first: null, meta: { changes: 0 } };
+      }
+      row.updates_json = JSON.stringify([...updates, JSON.parse(updateJson)]);
+      row.expected_by = expectedBy || row.expected_by || null;
+      row.url = url;
+      row.announced_at = announcedAt;
+      row.telegram_revision = (row.telegram_revision || 0) + 1;
+      return { first: { ...row }, meta: { changes: 1 } };
     }
 
     if (/^UPDATE announced_resets SET updates_json = \?, expected_by = \?, url = \?, announced_at = \? WHERE id = \?$/i.test(q)) {
@@ -335,6 +353,9 @@ export function createMemoryD1() {
     prepare(sql) {
       return makeStatement(sql);
     },
+    // This adapter previews source storage only. Use Wrangler local D1 for
+    // durable Telegram triggers, claims, delivery, and scheduled retries.
+    _supportsTelegramOutbox: false,
     _tables: { resets, announcedResets, webhookEvents, emailSubs, pushSubs, presence },
   };
 }

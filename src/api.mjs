@@ -42,12 +42,84 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
+/**
+ * Secret backing unsubscribe links. Falls back to the webhook client secret so
+ * a deployment that already runs has one without extra configuration.
+ */
+export function unsubscribeSecret(env) {
+  return env?.EMAIL_UNSUBSCRIBE_SECRET || env?.X_OAUTH2_CLIENT_SECRET || "";
+}
+
+/**
+ * Deterministic per-address token. Derived, never stored, so existing
+ * subscribers get a working link without a migration.
+ * @param {string} secret
+ * @param {string} email already normalized to lowercase
+ */
+export async function unsubscribeToken(secret, email) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(email));
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export function unsubscribeUrl(env, email, token) {
+  const site = (env?.SITE_URL || "https://antigravity-resets.com").replace(/\/+$/, "");
+  return `${site}/api/v1/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
+}
+
+function concatChunks(chunks, total) {
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/**
+ * Enforce the size cap while reading, not after. `request.text()` buffers the
+ * whole body first, so a client could force arbitrary memory use before the
+ * 413. Content-Length is checked up front and the stream is abandoned the
+ * moment the byte budget is exceeded.
+ */
 async function readJsonBody(request, maxBytes = 64 * 1024) {
-  const text = await request.text();
-  if (text.length > maxBytes) {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
     return { error: "Payload too large", status: 413 };
   }
-  if (!text) return { data: {} };
+  if (!request.body) return { data: {} };
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return { error: "Payload too large", status: 413 };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  if (total === 0) return { data: {} };
+  const text = new TextDecoder().decode(concatChunks(chunks, total));
   try {
     return { data: JSON.parse(text) };
   } catch {
@@ -235,7 +307,17 @@ export async function handleApiRequest(request, env) {
       return json({ error: "Invalid email address" }, 400);
     }
     const result = await addEmailSubscription(env?.DB, { email, locale });
-    return json({ ok: true, ...result }, 201);
+    const secret = unsubscribeSecret(env);
+    const normalized = email.trim().toLowerCase();
+    const token = secret ? await unsubscribeToken(secret, normalized) : "";
+    return json(
+      {
+        ok: true,
+        ...result,
+        ...(token ? { unsubscribeUrl: unsubscribeUrl(env, normalized, token) } : {}),
+      },
+      201,
+    );
   }
 
   // POST /api/v1/subscribe/push — store Web Push subscription
@@ -260,24 +342,43 @@ export async function handleApiRequest(request, env) {
     return json({ ok: true, ...result }, 201);
   }
 
-  // GET / POST /api/v1/unsubscribe — remove email alert subscription
+  // GET / POST /api/v1/unsubscribe — remove an email alert subscription.
+  // Requires the per-address HMAC token issued at subscribe time: without it a
+  // plain image tag or link could unsubscribe any address (CSRF), and the
+  // response must not disclose whether that address was subscribed at all.
   if (
     pathname === "/api/v1/unsubscribe" &&
     (request.method === "POST" || request.method === "GET")
   ) {
+    const secret = unsubscribeSecret(env);
+    if (!secret) {
+      return json({ error: "Unsubscribe is not configured" }, 503);
+    }
+
     let email = "";
+    let token = "";
     if (request.method === "GET") {
       email = (url.searchParams.get("email") || "").trim();
+      token = (url.searchParams.get("token") || "").trim();
     } else {
       const parsed = await readJsonBody(request);
       if (parsed.error) return json({ error: parsed.error }, parsed.status);
       email = typeof parsed.data.email === "string" ? parsed.data.email.trim() : "";
+      token = typeof parsed.data.token === "string" ? parsed.data.token.trim() : "";
     }
     if (!email || !EMAIL_RE.test(email) || email.length > 254) {
       return json({ error: "Invalid email address" }, 400);
     }
-    const result = await removeEmailSubscription(env?.DB, email);
-    return json({ ok: true, ...result });
+
+    const expected = await unsubscribeToken(secret, email.toLowerCase());
+    if (!token || !timingSafeEqual(token, expected)) {
+      return json({ error: "Invalid or missing unsubscribe token" }, 403);
+    }
+
+    await removeEmailSubscription(env?.DB, email);
+    // Generic response on purpose: revealing `removed` would let anyone probe
+    // whether a given address is subscribed.
+    return json({ ok: true });
   }
 
   // POST /api/v1/admin/review/resolve — approve or dismiss a pending needs_review item

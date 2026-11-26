@@ -48,7 +48,7 @@ export function buildFaqEntries(data, lang) {
  * @param {string} lang
  * @returns {object} JSON-LD @graph document
  */
-export function buildJsonLd(data, lang) {
+export function buildJsonLd(data, lang, faqEntries = buildFaqEntries(data, lang)) {
   const meta = pageMeta(lang);
   const url = lang === "en" ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN}/${lang}`;
   const latest = data?.stats?.latest;
@@ -129,7 +129,7 @@ export function buildJsonLd(data, lang) {
       "@id": `${SITE_ORIGIN}/#faq`,
       url,
       inLanguage: lang,
-      mainEntity: buildFaqEntries(data, lang).map((item) => ({
+      mainEntity: (faqEntries || []).map((item) => ({
         "@type": "Question",
         name: item.q,
         acceptedAnswer: { "@type": "Answer", text: item.a },
@@ -145,6 +145,6 @@ export function buildJsonLd(data, lang) {
  * @param {string} lang
  * @returns {string} ready-to-inline `<script type="application/ld+json">`
  */
-export function renderJsonLdScript(data, lang) {
-  return `<script type="application/ld+json">${jsonForScript(buildJsonLd(data, lang))}</script>`;
+export function renderJsonLdScript(data, lang, faqEntries) {
+  return `<script type="application/ld+json">${jsonForScript(buildJsonLd(data, lang, faqEntries))}</script>`;
 }

@@ -395,6 +395,7 @@ export function classifyResetTweet(tweet, watchedHandles = new Set(DEFAULT_WATCH
     authorName: tweet.authorName,
     models: models.length > 0 ? models : ["Gemini"],
     url: tweet.url,
+    quoteText: text,
     summary: { en: text },
     thanksCount: 0,
     source: "x_webhook",

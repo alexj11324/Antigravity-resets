@@ -1,12 +1,13 @@
+import { drainTelegramOutbox } from "./telegram-outbox.mjs";
 import {
   parseWebhookPayload,
   parseWatchedHandles,
 } from "./reset-classifier.mjs";
 import { judgeResetTweet } from "./joint-judge.mjs";
+import { unsubscribeSecret, unsubscribeToken, unsubscribeUrl } from "./api.mjs";
 import {
   listEmailSubscribers,
   recordWebhookEventAndResets,
-  setAnnouncementTelegramMessageId,
 } from "./store.mjs";
 
 const WEBHOOK_PATH = "/api/webhooks/x";
@@ -102,22 +103,33 @@ function siteDisplayHost(siteUrl) {
   }
 }
 
+function telegramSourceQuote(item) {
+  // Model summaries explain the event on the website; only original post text
+  // belongs inside an attributed Telegram quote. Preserve its exact wording.
+  if (typeof item.quoteText !== "string" || !item.quoteText.trim()) return [];
+  const sig = shortAuthorSignature(item.authorName, item.authorHandle);
+  return [`<blockquote>${escapeHtml(item.quoteText)}</blockquote>`, `- ${escapeHtml(sig)}`];
+}
+
+function telegramMessageWithQuotes(heading, quoteBlocks, footer) {
+  const html = [heading, ...quoteBlocks, "", footer].join("\n");
+  // Counting serialized HTML is conservative: Telegram limits text to 4096
+  // characters after entity parsing. Keep the source link rather than alter a quote.
+  return html.length <= 4096 ? html : [heading, "", footer].join("\n");
+}
+
 export function formatConfirmedTelegramHtml(reset, siteUrl = "https://antigravity-resets.com") {
   const host = siteDisplayHost(siteUrl);
   const heading =
     reset.type === "banked"
       ? "Antigravity banked reset confirmed"
       : "Antigravity reset confirmed";
-  const quoteRaw = (reset.quoteText || reset.summary?.en || "").trim();
-  const sig = shortAuthorSignature(reset.authorName, reset.authorHandle);
-  const quoteLine = quoteRaw ? `${quoteRaw} - ${sig}` : `Antigravity usage limits have been reset. - ${sig}`;
-  return [
+  const quote = telegramSourceQuote(reset);
+  return telegramMessageWithQuotes(
     `✅ <b>${escapeHtml(heading)}</b>`,
-    "",
-    `<blockquote>${escapeHtml(quoteLine)}</blockquote>`,
-    "",
+    quote.length ? ["", ...quote] : [],
     `<a href="${escapeHtml(reset.url)}">View on X</a> · Tracked by <a href="${escapeHtml(siteUrl)}">${escapeHtml(host)}</a>`,
-  ].join("\n");
+  );
 }
 
 export function formatExpectedTelegramHtml(
@@ -127,10 +139,6 @@ export function formatExpectedTelegramHtml(
   const host = siteDisplayHost(siteUrl);
   const etaLabel = formatExpectedUtcLabel(announcement.expectedBy);
   const isWatch = announcement.status === "possible";
-  const quoteRaw = (announcement.quoteText || announcement.summary?.en || "").trim();
-  const sig = shortAuthorSignature(announcement.authorName, announcement.authorHandle);
-  const quoteLine = quoteRaw ? `${quoteRaw} - ${sig}` : `${sig}`;
-
   const heading = isWatch
     ? etaLabel
       ? `⚠️ <b>Possible Antigravity reset by ${escapeHtml(etaLabel)}</b>`
@@ -139,142 +147,20 @@ export function formatExpectedTelegramHtml(
       ? `🗓 <b>Antigravity reset expected by ${escapeHtml(etaLabel)}</b>`
       : `🗓 <b>Antigravity reset expected time to be announced</b>`;
 
-  const blocks = [heading, "", `<blockquote>${escapeHtml(quoteLine)}</blockquote>`];
+  const quote = telegramSourceQuote(announcement);
+  const blocks = quote.length ? ["", ...quote] : [];
 
   const updates = Array.isArray(announcement.updates) ? announcement.updates : [];
   for (const upd of updates) {
-    const updSig = shortAuthorSignature(upd.authorName, upd.authorHandle);
-    const updQuote = `${String(upd.quoteText || "").trim()} - ${updSig}`;
-    blocks.push("", "<i>Update:</i>", `<blockquote>${escapeHtml(updQuote)}</blockquote>`);
+    const updateQuote = telegramSourceQuote(upd);
+    if (updateQuote.length) blocks.push("", "<i>Update:</i>", ...updateQuote);
   }
 
   const footerText = isWatch
     ? `<a href="${escapeHtml(announcement.url)}">View on X</a> · Track this watch on <a href="${escapeHtml(siteUrl)}">${escapeHtml(host)}</a>`
     : `<a href="${escapeHtml(announcement.url)}">View on X</a> · Track the announced reset on <a href="${escapeHtml(siteUrl)}">${escapeHtml(host)}</a>`;
 
-  blocks.push("", footerText);
-  return blocks.join("\n");
-}
-
-async function notifyTelegram(env, reset, fetchImpl = fetch) {
-  if (!env?.TELEGRAM_BOT_TOKEN || !env?.TELEGRAM_CHAT_ID) return;
-  const siteUrl = (env.SITE_URL || "https://antigravity-resets.com").replace(/\/+$/, "");
-  const html = formatConfirmedTelegramHtml(reset, siteUrl);
-
-  try {
-    const response = await fetchImpl(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: env.TELEGRAM_CHAT_ID,
-          text: html,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
-      },
-    );
-    const result = await response.json().catch(() => null);
-    if (!response.ok || result?.ok !== true) {
-      console.error(JSON.stringify({
-        event: "telegram_notify_failed", resetId: reset.id,
-        status: response.status,
-        errorCode: Number.isInteger(result?.error_code) ? result.error_code : null,
-      }));
-      return;
-    }
-    console.log(JSON.stringify({
-      event: "telegram_notify_sent", resetId: reset.id,
-      messageId: result.result?.message_id || null,
-    }));
-  } catch {
-    console.error(
-      JSON.stringify({ event: "telegram_notify_failed", resetId: reset.id, reason: "network_error" }),
-    );
-  }
-}
-
-async function notifyTelegramExpected(env, announcement, fetchImpl = fetch) {
-  if (!env?.TELEGRAM_BOT_TOKEN || !env?.TELEGRAM_CHAT_ID) return;
-  const siteUrl = (env.SITE_URL || "https://antigravity-resets.com").replace(/\/+$/, "");
-  const html = formatExpectedTelegramHtml(announcement, siteUrl);
-
-  // If this is an update to an existing watch and we stored its Telegram message_id,
-  // edit the existing watch message in-place (matching Codex Resets Alert's Update: card).
-  if (announcement.isUpdate && announcement.telegramMessageId) {
-    try {
-      const editRes = await fetchImpl(
-        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageText`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: env.TELEGRAM_CHAT_ID,
-            message_id: Number(announcement.telegramMessageId) || announcement.telegramMessageId,
-            text: html,
-            parse_mode: "HTML",
-            disable_web_page_preview: true,
-          }),
-        },
-      );
-      const result = await editRes.json().catch(() => null);
-      if (editRes.ok && result?.ok === true) {
-        console.log(JSON.stringify({
-          event: "telegram_expected_notify_edited", announcementId: announcement.id,
-          messageId: announcement.telegramMessageId,
-        }));
-        return;
-      }
-      console.error(JSON.stringify({
-        event: "telegram_expected_edit_failed", announcementId: announcement.id,
-        status: editRes.status,
-        errorCode: Number.isInteger(result?.error_code) ? result.error_code : null,
-      }));
-    } catch {
-      console.error(JSON.stringify({
-        event: "telegram_expected_edit_failed", announcementId: announcement.id,
-        reason: "network_error",
-      }));
-    }
-  }
-
-  try {
-    const res = await fetchImpl(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: env.TELEGRAM_CHAT_ID,
-          text: html,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
-      },
-    );
-    const body = await res.json().catch(() => null);
-    if (!res.ok || body?.ok !== true) {
-      console.error(JSON.stringify({
-        event: "telegram_expected_notify_failed", announcementId: announcement.id,
-        status: res.status,
-        errorCode: Number.isInteger(body?.error_code) ? body.error_code : null,
-      }));
-      return;
-    }
-    const msgId = body.result?.message_id;
-    if (msgId != null && env?.DB && announcement.id) {
-      await setAnnouncementTelegramMessageId(env.DB, announcement.id, msgId);
-    }
-    console.log(JSON.stringify({
-      event: "telegram_expected_notify_sent", announcementId: announcement.id,
-      messageId: msgId ?? null,
-    }));
-  } catch {
-    console.error(
-      JSON.stringify({ event: "telegram_expected_notify_failed", announcementId: announcement.id, reason: "network_error" }),
-    );
-  }
+  return telegramMessageWithQuotes(heading, blocks, footerText);
 }
 
 async function notifyEmailSubscribers(env, reset, fetchImpl = fetch, { isExpected = false } = {}) {
@@ -300,7 +186,14 @@ async function notifyEmailSubscribers(env, reset, fetchImpl = fetch, { isExpecte
       reset.summary?.en ||
       reset.quoteText ||
       "Official Antigravity quota reset.";
-    const unsubUrl = `${siteUrl}/api/v1/unsubscribe?email=${encodeURIComponent(sub.email)}`;
+    // Signed link: the unsubscribe endpoint rejects anything without a token.
+    const unsubSecret = unsubscribeSecret(env);
+    const unsubToken = unsubSecret
+      ? await unsubscribeToken(unsubSecret, sub.email.toLowerCase())
+      : "";
+    const unsubUrl = unsubToken
+      ? unsubscribeUrl(env, sub.email, unsubToken)
+      : `${siteUrl}/api/v1/unsubscribe`;
     try {
       await fetchImpl("https://api.resend.com/emails", {
         method: "POST",
@@ -584,15 +477,14 @@ export async function handleXWebhook(request, env, ctx) {
       });
 
     if (ctx?.waitUntil) {
+      ctx.waitUntil(drainTelegramOutbox(env, { fetchImpl }));
       if (inserted.length > 0) {
         for (const reset of inserted) {
-          ctx.waitUntil(notifyTelegram(env, reset, fetchImpl));
           ctx.waitUntil(notifyEmailSubscribers(env, reset, fetchImpl));
         }
       }
       if (insertedAnnouncements.length > 0) {
         for (const ann of insertedAnnouncements) {
-          ctx.waitUntil(notifyTelegramExpected(env, ann, fetchImpl));
           ctx.waitUntil(
             notifyEmailSubscribers(env, ann, fetchImpl, { isExpected: true }),
           );
