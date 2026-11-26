@@ -228,6 +228,133 @@ test("the hourly cap still refuses work once it is actually spent", async (t) =>
   assert.equal(sent.length, 0, "a refused request must not mail");
 });
 
+test("a budget refusal leaves neither a pending row nor a cooldown", async (t) => {
+  // A request refused for budget mails nothing, so it must not write anything
+  // either: inserting the row first would let an exhausted hour grow the
+  // subscriptions table without bound.
+  const db = createMemoryD1();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response("{}", { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const env = {
+    DB: db,
+    EMAIL_UNSUBSCRIBE_SECRET: "s",
+    RESEND_API_KEY: "k",
+    RESEND_FROM_EMAIL: "a@b.com",
+  };
+  const post = (email) =>
+    worker.fetch(
+      new Request(`${SITE}/api/v1/subscribe/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }),
+      env,
+    );
+
+  // An existing pending row must keep its NULL cooldown through a 429.
+  await addEmailSubscription(db, { email: "existing@example.com", confirmed: 0 });
+
+  const hour = 3600000;
+  for (const offset of [0, hour]) {
+    const key = new Date(Math.floor((Date.now() + offset) / hour) * hour).toISOString();
+    db.sql
+      .prepare("INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 100)")
+      .run(key);
+    db.sql.prepare("UPDATE email_send_log SET sent = 100 WHERE window_start = ?").run(key);
+  }
+
+  assert.equal((await post("fresh@example.com")).status, 429);
+  assert.equal(
+    db.sql
+      .prepare("SELECT COUNT(*) AS n FROM email_subscriptions WHERE email = ?")
+      .get("fresh@example.com").n,
+    0,
+    "a refused request must not create a pending row",
+  );
+
+  assert.equal((await post("existing@example.com")).status, 429);
+  assert.equal(
+    db.sql
+      .prepare("SELECT confirmation_sent_at FROM email_subscriptions WHERE email = ?")
+      .get("existing@example.com").confirmation_sent_at,
+    null,
+    "a refused request must not claim the cooldown",
+  );
+  assert.equal(sent.length, 0);
+});
+
+test("concurrent duplicates send once and refund the extra slot", async (t) => {
+  // Both requests pass the advisory read before either claims the row, so this
+  // exercises the claim-loser refund rather than the fast reject.
+  const db = createMemoryD1();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response("{}", { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const prepare = db.prepare.bind(db);
+  let arrived = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  db.prepare = (query) => {
+    const wrapped = prepare(query);
+    const first = wrapped.first.bind(wrapped);
+    wrapped.first = async (...args) => {
+      const result = await first(...args);
+      if (/FROM email_subscriptions WHERE email = \?/.test(query)) {
+        arrived += 1;
+        if (arrived === 2) release();
+        await gate;
+      }
+      return result;
+    };
+    return wrapped;
+  };
+
+  const env = {
+    DB: db,
+    EMAIL_UNSUBSCRIBE_SECRET: "s",
+    RESEND_API_KEY: "k",
+    RESEND_FROM_EMAIL: "a@b.com",
+  };
+  const post = () =>
+    worker.fetch(
+      new Request(`${SITE}/api/v1/subscribe/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "race@example.com" }),
+      }),
+      env,
+    );
+
+  const [a, b] = await Promise.all([post(), post()]);
+  assert.equal(a.status, 202);
+  assert.equal(b.status, 202);
+  assert.equal(sent.length, 1, "only the claim winner may mail");
+
+  const windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
+  assert.equal(
+    db.sql.prepare("SELECT sent FROM email_send_log WHERE window_start = ?").get(windowStart).sent,
+    1,
+    "the losing request must refund its slot",
+  );
+});
+
 test("a tampered confirmation token is rejected", async () => {
   const db = createMemoryD1();
   const env = { DB: db, EMAIL_UNSUBSCRIBE_SECRET: "test-secret" };
