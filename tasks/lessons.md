@@ -49,6 +49,13 @@ data. Set `browser_ttl: { mode: "respect_origin" }` (and usually
 10 with "not entitled to use a mitigation timeout different from 10". One rule
 is allowed per zone; block returns 429 for the mitigation window.
 
+**Cache keys must be canonical, not the raw URL.** Keying on `request.url`
+lets anyone mint a new entry with `?junk=<random>`, filling the shared cache
+and evicting the entries real traffic needs. Build the key from the parameters
+the handler actually reads, after the same validation: invalid or ignored
+values must collapse onto the representation they would otherwise get. Test it
+by asserting the entry count stays 1 across different junk strings.
+
 ## A GET that mutates state breaks under HEAD and prefetch
 
 `GET /api/v1/unsubscribe` removed the subscription. Mail scanners prefetch
