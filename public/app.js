@@ -19,6 +19,11 @@ const FALLBACK_AVATAR_SVG =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#FFF9EB"/><ellipse cx="48" cy="52" rx="34" ry="12" fill="none" stroke="#181614" stroke-width="4" transform="rotate(-22 48 52)"/><circle cx="48" cy="48" r="22" fill="#FFD84D" stroke="#181614" stroke-width="4"/><circle cx="41" cy="45" r="3" fill="#181614"/><circle cx="55" cy="45" r="3" fill="#181614"/><path d="M41 55q7 6 14 0" fill="none" stroke="#181614" stroke-width="3.5" stroke-linecap="round"/></svg>`,
   );
 
+// Post text stays in its original language; locale only controls interface copy.
+function originalPostText(item) {
+  return typeof item?.quoteText === "string" && item.quoteText.trim() ? item.quoteText : "";
+}
+
 function getSessionId() {
   let id = sessionStorage.getItem("ag_session_id");
   if (!id) {
@@ -334,11 +339,11 @@ function showCellTooltip(targetEl, cellData) {
         ? `${cellData.resets.length} ${c.tipMultiSuffix}`
         : baseTitle;
 
-    const rawText = cellData.reset.summary?.[state.locale] || cellData.reset.summary?.en || "";
+    const rawText = originalPostText(cellData.reset) || c.viewOnX;
     const bodyLine = document.createElement("div");
     bodyLine.className = "cell-tip-body";
-    bodyLine.textContent =
-      rawText.length > 105 ? `${rawText.slice(0, 102)}...` : rawText;
+    bodyLine.textContent = rawText;
+    bodyLine.style.whiteSpace = "pre-wrap";
 
     const hintLine = document.createElement("div");
     hintLine.className = "cell-tip-date";
@@ -418,7 +423,7 @@ function renderHeatmap() {
         }`;
         cell.setAttribute(
           "aria-label",
-          `${dateLabel}: ${cellData.reset.summary?.[state.locale] || cellData.reset.summary?.en || c.tipRegularTitle}`,
+          `${dateLabel}: ${originalPostText(cellData.reset) || c.viewOnX}`,
         );
       } else {
         cell = document.createElement("button");
@@ -491,7 +496,8 @@ function renderAnnouncements() {
 
     const text = document.createElement("p");
     text.className = "bubble-text";
-    text.textContent = item.summary?.[state.locale] || item.summary?.en || "";
+    text.textContent = originalPostText(item) || c.viewOnX;
+    text.style.whiteSpace = "pre-wrap";
 
     const foot = document.createElement("div");
     foot.className = "bubble-footer";
@@ -755,8 +761,9 @@ function renderUpcomingBanner() {
       : ann.authorHandle === "@_anshulr"
         ? "Anshul"
         : ann.authorName || ann.authorHandle;
-  const mainQuote = ann.quoteText || ann.summary?.[state.locale] || ann.summary?.en || "";
-  els.upcomingQuote.textContent = `${mainQuote} - ${authorShort}`;
+  const mainQuote = originalPostText(ann);
+  els.upcomingQuote.textContent = mainQuote ? `${mainQuote} - ${authorShort}` : c.viewOnX;
+  els.upcomingQuote.style.whiteSpace = "pre-wrap";
 
   const updates = Array.isArray(ann.updates) ? ann.updates : [];
   if (updates.length > 0) {
@@ -772,7 +779,9 @@ function renderUpcomingBanner() {
         upd.authorHandle === "@_mohansolo"
           ? "Varun"
           : upd.authorName || upd.authorHandle || authorShort;
-      bq.textContent = `${upd.quoteText || ""} - ${uShort}`;
+      const updateQuote = originalPostText(upd);
+      bq.textContent = updateQuote ? `${updateQuote} - ${uShort}` : c.viewOnX;
+      bq.style.whiteSpace = "pre-wrap";
       els.upcomingUpdates.append(label, bq);
     }
   } else {
@@ -895,10 +904,7 @@ async function fetchLiveData() {
   ) {
     const c = t();
     const label = nextLatest.type === "banked" ? c.typeBanked : c.typeRegular;
-    const body =
-      nextLatest.summary?.[state.locale] ||
-      nextLatest.summary?.en ||
-      "Official Antigravity quota reset announced.";
+    const body = originalPostText(nextLatest) || c.viewOnX;
     try {
       const n = new Notification(`${c.siteName}: ${label}`, {
         body,
@@ -1133,3 +1139,11 @@ setInterval(() => {
   fetchLiveData().catch(() => {});
   pingPresence();
 }, 60000);
+
+// Register the service worker for offline assets and push delivery. It never
+// caches HTML or API responses, so locale pages and reset data stay live.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

@@ -1,7 +1,7 @@
 // Structured data for the tracker. Kept separate from the HTML rewriter so the
 // schema graph can be unit-tested and reused by the Markdown surface.
 
-import { copyFor, formatExact, formatRelative, jsonForScript, localizedSummary, pageMeta, SITE_NAME, SITE_ORIGIN } from "./seo-data.mjs";
+import { copyFor, formatExact, formatRelative, jsonForScript, originalPostText, pageMeta, SITE_NAME, SITE_ORIGIN } from "./seo-data.mjs";
 
 const DEVELOPER_ORGANIZATION = Object.freeze({
   name: SITE_NAME,
@@ -19,8 +19,8 @@ export function buildLiveAnswer(data, lang) {
   const meta = pageMeta(lang);
   const latest = data?.stats?.latest;
   if (!latest) return `${meta.noResetYet} ${meta.answerSuffix}`;
-  const summary = localizedSummary(latest, lang);
-  const quoted = summary ? `"${summary}"` : "";
+  const text = originalPostText(latest);
+  const quoted = text ? `"${text}"` : "";
   const author = `${latest.authorName || "The Antigravity team"} (${latest.authorHandle})`;
   const when = formatRelative(latest.timestamp, lang);
   const exact = formatExact(latest.timestamp, lang);

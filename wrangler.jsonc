@@ -15,7 +15,7 @@
   //   npx wrangler email sending enable antigravity-resets.com
   // Then uncomment the block below and deploy. Until then the Worker falls back
   // to Resend whenever RESEND_API_KEY and RESEND_FROM_EMAIL are set.
-  // "send_email": [{ "name": "EMAIL" }],
+  "send_email": [{ "name": "EMAIL" }],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

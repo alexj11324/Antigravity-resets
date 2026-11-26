@@ -125,13 +125,11 @@ export function formatRelative(isoTimestamp, lang) {
 }
 
 /**
- * Pick a localized summary string with a graceful fallback.
- * @param {{summary?: Record<string, string>}} reset
- * @param {string} lang
+ * Return source post text in its original language, without generated summaries.
+ * @param {{quoteText?: string}} item
  */
-export function localizedSummary(reset, lang) {
-  const summary = reset?.summary || {};
-  return summary[lang] || summary.en || "";
+export function originalPostText(item) {
+  return typeof item?.quoteText === "string" && item.quoteText.trim() ? item.quoteText : "";
 }
 
 /**

@@ -5,6 +5,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildHeadHtml, renderAnnouncementsHtml, renderFaqHtml } from "../src/seo-html.mjs";
+import { buildAnnouncementsMarkdown } from "../src/seo-text.mjs";
+import { buildLiveAnswer } from "../src/seo-jsonld.mjs";
+import { LANG_CODES, escapeHtml } from "../src/seo-data.mjs";
 
 const SITE = "https://antigravity-resets.com";
 
@@ -16,6 +19,7 @@ function sampleData() {
     authorHandle: "@_mohansolo",
     authorName: "Varun Mohan",
     url: "https://x.com/_mohansolo/status/1",
+    quoteText: "Original Thanksgiving post.\nAll users have a reset!",
     summary: { en: "Reset for Thanksgiving.", "zh-CN": "感恩节重置。" },
     thanksCount: 12,
   };
@@ -58,9 +62,9 @@ test("buildHeadHtml leaves tags the static shell already owns to the shell", () 
   }
 });
 
-test("buildHeadHtml keeps JSON-LD parseable when a summary contains markup", () => {
+test("buildHeadHtml keeps JSON-LD parseable when source text contains markup", () => {
   const data = sampleData();
-  data.resets[0].summary.en = '</script><img src=x onerror="alert(1)">';
+  data.resets[0].quoteText = '</script><img src=x onerror="alert(1)">';
   data.stats.latest = data.resets[0];
   const head = buildHeadHtml(data, "en");
   const raw = head.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
@@ -94,6 +98,7 @@ test("renderAnnouncementsHtml drops non-https links and escapes text", () => {
       authorHandle: "@a",
       authorName: "A",
       url: "javascript:alert(1)",
+      quoteText: "<script>bad</script>",
       summary: { en: "<script>bad</script>" },
     },
     {
@@ -103,12 +108,55 @@ test("renderAnnouncementsHtml drops non-https links and escapes text", () => {
       authorHandle: "@b",
       authorName: "B",
       url: "https://x.com/b/status/1",
+      quoteText: "fine",
       summary: { en: "fine" },
     },
   ];
   const html = renderAnnouncementsHtml(resets, "en");
   assert.ok(!html.includes("javascript:"), "unsafe scheme must not reach href");
-  assert.ok(!html.includes("<script>bad"), "summary must be escaped");
+  assert.ok(!html.includes("<script>bad"), "source text must be escaped");
+  assert.match(html, /&lt;script&gt;bad&lt;\/script&gt;/);
   assert.match(html, /href="https:\/\/x\.com\/b\/status\/1"/);
   assert.equal((html.match(/class="bubble-row"/g) || []).length, 2);
+});
+
+test("all locales use the complete original post in HTML, Markdown, and live answers", () => {
+  const data = sampleData();
+  data.resets[0].quoteText += `\n${"Full original content. ".repeat(12)}`;
+  const quote = data.resets[0].quoteText;
+  for (const lang of LANG_CODES) {
+    const html = renderAnnouncementsHtml(data.resets, lang);
+    const markdown = buildAnnouncementsMarkdown(data.resets, lang);
+    const answer = buildLiveAnswer(data, lang);
+    assert.ok(html.includes(escapeHtml(quote)), lang);
+    assert.ok(answer.includes(quote), lang);
+    assert.match(markdown, /> Original Thanksgiving post\\\.\n> All users have a reset\\!/);
+    assert.ok(markdown.includes("Full original content\\. ".repeat(12)), lang);
+    for (const summary of Object.values(data.resets[0].summary)) {
+      assert.ok(!html.includes(summary), lang);
+      assert.ok(!markdown.includes(summary), lang);
+      assert.ok(!answer.includes(summary), lang);
+    }
+  }
+});
+
+test("missing originals never turn generated summaries into author text", () => {
+  const data = sampleData();
+  for (const quoteText of [undefined, "", " \n "]) {
+    data.resets[0].quoteText = quoteText;
+    for (const lang of LANG_CODES) {
+      const surfaces = [
+        renderAnnouncementsHtml(data.resets, lang),
+        buildAnnouncementsMarkdown(data.resets, lang),
+        buildLiveAnswer(data, lang),
+      ];
+      for (const rendered of surfaces) {
+        for (const summary of Object.values(data.resets[0].summary)) {
+          assert.ok(!rendered.includes(summary), `${lang}: ${quoteText}`);
+        }
+      }
+      assert.ok(surfaces[0].includes(data.resets[0].url), lang);
+      assert.ok(surfaces[1].includes(data.resets[0].url), lang);
+    }
+  }
 });

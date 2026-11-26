@@ -9,6 +9,9 @@ import {
   renderRobots,
   renderSitemap,
 } from "./seo-text.mjs";
+import { handleMcpRequest } from "./mcp.mjs";
+import { buildOpenApi } from "./openapi.mjs";
+import { handleGuideRequest } from "./guide.mjs";
 
 const APEX_HOST = "antigravity-resets.com";
 const WWW_HOST = `www.${APEX_HOST}`;
@@ -64,6 +67,16 @@ export default {
       );
     }
 
+    if (pathname === "/mcp") {
+      return handleMcpRequest(request, env);
+    }
+
+    if (pathname === "/api/openapi.json") {
+      return Response.json(buildOpenApi(), {
+        headers: { "Cache-Control": "public, max-age=3600" },
+      });
+    }
+
     if (
       pathname.startsWith("/api/") ||
       pathname === "/feed.xml" ||
@@ -106,6 +119,10 @@ export default {
     if (markdownMatch) {
       const lang = markdownMatch[1] === "index" ? "en" : markdownMatch[1];
       return renderMarkdownResponse(env, lang);
+    }
+
+    if (pathname === "/guide" || /^\/(zh-CN|zh-TW|ja|ko)\/guide$/.test(pathname)) {
+      return handleGuideRequest(request, env, pathname);
     }
 
     const lang = langFromPath(pathname);

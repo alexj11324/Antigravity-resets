@@ -2,6 +2,7 @@ import { SEED_RESETS } from "./seed-data.mjs";
 
 const PRESENCE_TTL_MS = 90 * 1000;
 const BASELINE_PRESENCE = 128;
+const seedQuotesByTweetId = new Map(SEED_RESETS.map(({ tweetId, quoteText }) => [tweetId, quoteText]));
 
 function rowToReset(row) {
   let models = ["All Antigravity models"];
@@ -40,6 +41,7 @@ function rowToReset(row) {
     authorName: row.author_name,
     models,
     url: row.url,
+    quoteText: row.quote_text?.trim() ? row.quote_text : seedQuotesByTweetId.get(row.tweet_id) ?? null,
     summary,
     judgeSummary,
     thanksCount: Number(row.thanks_count || 0),

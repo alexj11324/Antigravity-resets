@@ -12,7 +12,7 @@ import {
   LANG_LABEL,
   langUrl,
   loadSeoData,
-  localizedSummary,
+  originalPostText,
   pageMeta,
   safeHttpsUrl,
   SITE_ORIGIN,
@@ -95,7 +95,7 @@ export function renderAnnouncementsHtml(resets, lang) {
   const copy = copyFor(lang);
   return resets
     .map((item) => {
-      const summary = localizedSummary(item, lang);
+      const text = originalPostText(item) || copy.viewOnX || "View on X";
       const viewLabel = copy.viewOnX || "View on X";
       const href = safeHttpsUrl(item.url);
       return [
@@ -108,7 +108,7 @@ export function renderAnnouncementsHtml(resets, lang) {
         `<span class="bubble-ago">${escapeHtml(formatRelative(item.timestamp, lang))}</span>`,
         `<span class="bubble-date">${escapeHtml(formatExact(item.timestamp, lang))}</span>`,
         "</div>",
-        `<p class="bubble-text">${escapeHtml(summary)}</p>`,
+        `<p class="bubble-text" style="white-space: pre-wrap">${escapeHtml(text)}</p>`,
         '<div class="bubble-footer">',
         `<span class="bubble-author">${escapeHtml(`${item.authorName} (${item.authorHandle})`)}</span>`,
         href

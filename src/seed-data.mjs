@@ -19,6 +19,7 @@ export const SEED_RESETS = [
   {
     id: "x-2125851902009311306",
     tweetId: "2125851902009311306",
+    quoteText: "Resetting Gemini quota for all Antigravity users for Thanksgiving!\n\nWe’re very thankful for all of our users ❤️\n\nWe’re growing very quickly and are working tirelessly to make sure you all have a great experience!",
     timestamp: "2026-11-26T07:19:24Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -38,6 +39,7 @@ export const SEED_RESETS = [
   {
     id: "x-2124960419429458207",
     tweetId: "2124960419429458207",
+    quoteText: "Resetting Gemini quotas for everyone on Antigravity because we’re upgrading models across tiers!\n\nPaid Pro users will now have access to Carbon and Hydrogen will be available to all users as promised!\n\nAnd as always, keep swarming with Neon 🚀",
     timestamp: "2026-11-23T20:16:58Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -57,6 +59,7 @@ export const SEED_RESETS = [
   {
     id: "x-2124070033534161407",
     tweetId: "2124070033534161407",
+    quoteText: "Reset everyone’s Gemini quota on Antigravity.\n\nThe caching improvements have increased the amount you can get done in quota by 22%. Enjoy building with Neon over the weekend!",
     timestamp: "2026-11-21T09:18:53Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -76,6 +79,7 @@ export const SEED_RESETS = [
   {
     id: "x-2122836883877347836",
     tweetId: "2122836883877347836",
+    quoteText: "One more thing…\n\nIn honor of Antigravity turning 1, we’re resetting quota for everyone across all models!",
     timestamp: "2026-11-17T23:38:48Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -95,6 +99,7 @@ export const SEED_RESETS = [
   {
     id: "x-2121380918355234957",
     tweetId: "2121380918355234957",
+    quoteText: "To mark a week of relentless shipping, we’re resetting everyone’s Gemini quota on Antigravity!\n\nGo build something amazing with swarms 🚀",
     timestamp: "2026-11-13T23:13:18Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -114,6 +119,7 @@ export const SEED_RESETS = [
   {
     id: "x-2118855362518675720",
     tweetId: "2118855362518675720",
+    quoteText: "Resetting everyone’s Gemini and Argon quota on Antigravity.\n\nLots of updates this week so want to make sure everyone can build for the weekend. Lots more to come next week!",
     timestamp: "2026-11-06T23:57:39Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -133,6 +139,7 @@ export const SEED_RESETS = [
   {
     id: "x-2111220356178751860",
     tweetId: "2111220356178751860",
+    quoteText: "Lots of excitement for Argon and Gemini this week on Antigravity. \n\nResetting Argon and Gemini model quotas for everyone. Keep building through the weekend!",
     timestamp: "2026-10-16T22:18:52Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -152,6 +159,7 @@ export const SEED_RESETS = [
   {
     id: "x-2100088051934601229",
     tweetId: "2100088051934601229",
+    quoteText: "Fixed, rolled out quota resets for everyone https://t.co/PL2I62Jlt4",
     timestamp: "2026-09-16T05:03:03Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -171,6 +179,7 @@ export const SEED_RESETS = [
   {
     id: "x-2095568203799806235",
     tweetId: "2095568203799806235",
+    quoteText: "We’re resetting Gemini quotas on Antigravity.\n\nTPUs are melting with 3.8 Flash usage but we want you all to keep building!",
     timestamp: "2026-09-03T17:42:48Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -190,6 +199,7 @@ export const SEED_RESETS = [
   {
     id: "x-2079636156589994347",
     tweetId: "2079636156589994347",
+    quoteText: "Gemini 3.6 Flash is out on Antigravity! We just reset everyone's weekly quotas, enjoy building.",
     timestamp: "2026-07-21T18:34:32Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -209,6 +219,7 @@ export const SEED_RESETS = [
   {
     id: "x-2068054113104069058",
     tweetId: "2068054113104069058",
+    quoteText: "We’ve root caused and mitigated the high rates of output text looping in Gemini 3.5 Flash. The new model export is rolled out. We’ve reset everyone’s weekly Gemini quotas so that you can give it a try in Antigravity asap!",
     timestamp: "2026-06-19T19:31:37Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -228,6 +239,7 @@ export const SEED_RESETS = [
   {
     id: "x-2065159034869830019",
     tweetId: "2065159034869830019",
+    quoteText: "We’ve heard your feedback and are launching a clearer, more detailed model quota usage dashboard. This can be found in the settings pane in the latest Antigravity 2.0 release. We are also resetting everyone’s weekly Gemini quotas (rolling out) - keep building!\n\nThis dashboard will also roll out to the IDE in its next release, but we didn’t want to wait on this given the amount of feedback we’ve received on this topic.",
     timestamp: "2026-06-11T19:47:37Z",
     type: "regular",
     authorHandle: "@_anshulr",
@@ -247,6 +259,7 @@ export const SEED_RESETS = [
   {
     id: "x-2061960989143441735",
     tweetId: "2061960989143441735",
+    quoteText: "We’ve rolled out a new version of Gemini 3.5 Flash in Antigravity that boasts much less and has higher endurance on harder tasks. Thanks for all of the feedback on the model. Keep it coming, we will act quickly across the stack to make the experience even better.\n\nWe’ve also gone ahead and reset Gemini rate limits for all users so you can start running this new model immediately.",
     timestamp: "2026-06-02T23:59:43Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -266,6 +279,7 @@ export const SEED_RESETS = [
   {
     id: "x-2058740603563966758",
     tweetId: "2058740603563966758",
+    quoteText: "We heard concerns that Antigravity consumes many tokens for simple tasks now. So, we're adding Gemini 3.5 Flash (Low) as a way to optimize token usage for these tasks. In our internal testing, it generates around 45% fewer tokens than Gemini 3.5 Flash (Medium) and generally outperforms Gemini 3 Flash (High) on SWE tasks.\n\nWe've also gone ahead and reset Gemini quota across all paid plans to make sure you have all the tokens needed to build for the next week 🙂",
     timestamp: "2026-05-25T02:43:04Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -285,6 +299,7 @@ export const SEED_RESETS = [
   {
     id: "x-2057910616153882949",
     tweetId: "2057910616153882949",
+    quoteText: "Thanks for all of the Antigravity feedback over the last couple of days, especially around the IDE. Our intention was never to remove the IDE support for developers, and we should have been clearer with that in the product from the beginning.\n\nWe’ve made it clearer in 2.0 on how to connect to the IDE, fixed issues with opening the IDE on Windows machines, provided instructions to restore IDE settings & extensions, and more.\n\nNew releases for the Antigravity IDE and Antigravity 2.0 have rolled out with these changes.\n\nWe should have done better so we’re going to reset everyone’s Gemini quota for the week again.",
     timestamp: "2026-05-22T19:44:59Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -304,6 +319,7 @@ export const SEED_RESETS = [
   {
     id: "x-2057656550286885284",
     tweetId: "2057656550286885284",
+    quoteText: "Yesterday, we 3x’d limits on Antigravity and are seeing you build so much more. One thing we heard was people are worried about hitting their weekly limits after a couple work sessions. To give you more runway, we’re 3x’ing the weekly Gemini quotas AGAIN on all paid plans.\n\nWe’ve also gone ahead and reset Gemini quotas on all paid plans. Don’t stop building!",
     timestamp: "2026-05-22T02:55:25Z",
     type: "regular",
     authorHandle: "@_mohansolo",
@@ -323,6 +339,7 @@ export const SEED_RESETS = [
   {
     id: "x-2057331857755422922",
     tweetId: "2057331857755422922",
+    quoteText: "An update: we’re 3xing the rate limits for Gemini models across all paid tiers in Antigravity and resetting everyone’s Gemini quota for the week.\n\nWe understand some people hit their rate limits quickly and wanted to respond fast. Lots more to come and enjoy building!",
     timestamp: "2026-05-21T05:25:12Z",
     type: "regular",
     authorHandle: "@_mohansolo",

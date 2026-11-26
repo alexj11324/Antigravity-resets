@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 export function createMemoryD1() {
   const sql = new DatabaseSync(':memory:');
-  for (const file of ['0001_init.sql', '0002_telegram_outbox.sql', '0003_confirm_existing_subscriptions.sql']) {
+  for (const file of ['0001_init.sql', '0002_telegram_outbox.sql', '0003_confirm_existing_subscriptions.sql', '0004_email_send_throttle.sql']) {
     sql.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   }
   function prepare(query) {

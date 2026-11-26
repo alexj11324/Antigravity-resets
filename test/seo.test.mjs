@@ -91,7 +91,10 @@ test("sitemap carries hreflang for all locales and no redirecting URL", async ()
   }
   assert.ok(body.includes(`${SITE}/api-docs`), "api-docs must be listed");
   assert.ok(!body.includes(`${SITE}/api/docs<`), "redirecting URL must not be listed");
-  assert.equal(body.match(/<loc>/g).length, 6, "five locales plus api-docs");
+  // Five locale home pages, five locale guide pages, plus api-docs.
+  assert.equal(body.match(/<loc>/g).length, 11, "five homes, five guides, api-docs");
+  assert.ok(body.includes(`${SITE}/guide`), "English guide must be listed");
+  assert.ok(body.includes(`${SITE}/ja/guide`), "localized guides must be listed");
 });
 
 test("robots.txt names the major AI crawlers", async () => {
@@ -194,7 +197,7 @@ test("safeHttpsUrl only admits absolute https URLs", async () => {
   assert.equal(safeHttpsUrl(null), "");
 });
 
-test("markdown summaries cannot break out of the document", async () => {
+test("original posts cannot break out of the Markdown document", async () => {
   const { buildAnnouncementsMarkdown } = await import("../src/seo-text.mjs");
   assert.equal(typeof buildAnnouncementsMarkdown, "function");
   const md = buildAnnouncementsMarkdown([
@@ -205,11 +208,13 @@ test("markdown summaries cannot break out of the document", async () => {
       authorHandle: "@a",
       authorName: "A",
       url: "javascript:alert(1)",
-      summary: { en: "# heading `code` [link](http://evil)" },
+      quoteText: "# heading `code` [link](http://evil)\n<script>bad</script>",
       thanksCount: 0,
     },
   ]);
   assert.ok(!md.includes("javascript:"), "unsafe scheme must not become a link");
   assert.ok(!md.includes("`code`"), "backticks must be neutralized");
   assert.ok(!md.includes("[link](http://evil)"), "raw markdown must be escaped");
+  assert.match(md, /> \\# heading/);
+  assert.match(md, /> &lt;script&gt;bad&lt;\/script&gt;/);
 });

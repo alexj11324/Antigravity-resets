@@ -303,7 +303,7 @@ export async function handleApiRequest(request, env) {
           `      <link>${escapeXml(r.url)}</link>`,
           `      <guid isPermaLink="false">${escapeXml(r.id)}</guid>`,
           `      <pubDate>${escapeXml(pubDate)}</pubDate>`,
-          `      <description>${escapeXml(r.summary?.en || "")}</description>`,
+          `      <description>${escapeXml(r.quoteText || "")}</description>`,
           "    </item>",
         ].join("\n");
       })
@@ -455,7 +455,7 @@ export async function handleApiRequest(request, env) {
     // mail any address a stranger types in.
     if (env?.DB) {
       const existing = await env.DB.prepare(
-        "SELECT confirmed, created_at FROM email_subscriptions WHERE email = ?",
+        "SELECT confirmed, confirmation_sent_at FROM email_subscriptions WHERE email = ?",
       )
         .bind(normalized)
         .first();
@@ -465,22 +465,32 @@ export async function handleApiRequest(request, env) {
         return json({ ok: true, pendingConfirmation: false }, 200);
       }
 
+      // Throttle on when we actually sent, not on row creation: `created_at`
+      // never changes on conflict, so it can only ever fire once.
       const cooldownMs = 10 * 60 * 1000;
-      const lastAttempt = existing?.created_at ? new Date(existing.created_at).getTime() : 0;
-      if (lastAttempt && Date.now() - lastAttempt < cooldownMs) {
+      const lastSent = existing?.confirmation_sent_at
+        ? new Date(existing.confirmation_sent_at).getTime()
+        : 0;
+      if (lastSent && Date.now() - lastSent < cooldownMs) {
         // Recently mailed. Swallow repeats so one address cannot be flooded.
         return json({ ok: true, pendingConfirmation: true }, 202);
       }
 
-      // Global budget: a crude but real ceiling on how much mail one hour can
-      // generate, independent of how many addresses an attacker cycles through.
-      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const recent = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM email_subscriptions WHERE created_at > ?",
+      // Reserve an hourly send slot atomically before dispatching. Counting rows
+      // missed repeat submits; counting sends and doing it as a conditional
+      // increment means the cap holds under concurrency.
+      const windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 0)",
       )
-        .bind(hourAgo)
-        .first();
-      if (Number(recent?.n || 0) >= 100) {
+        .bind(windowStart)
+        .run();
+      const reservation = await env.DB.prepare(
+        "UPDATE email_send_log SET sent = sent + 1 WHERE window_start = ? AND sent < 100",
+      )
+        .bind(windowStart)
+        .run();
+      if (Number(reservation?.meta?.changes || 0) === 0) {
         return json({ error: "Too many subscription attempts right now" }, 429);
       }
     }
@@ -493,6 +503,14 @@ export async function handleApiRequest(request, env) {
     } catch {
       // The row stays pending; the visitor can submit again.
       return json({ error: "Could not send the confirmation email" }, 502);
+    }
+
+    if (env?.DB) {
+      await env.DB.prepare(
+        "UPDATE email_subscriptions SET confirmation_sent_at = ? WHERE email = ?",
+      )
+        .bind(new Date().toISOString(), normalized)
+        .run();
     }
 
     // 202: accepted, not active. The signed links live only in the mail, so this

@@ -10,13 +10,14 @@ import {
   LANG_LABEL,
   langUrl,
   loadSeoData,
-  localizedSummary,
+  originalPostText,
   pageMeta,
   safeHttpsUrl,
   SITE_ORIGIN,
   SITE_NAME,
 } from "./seo-data.mjs";
 import { buildFaqEntries, buildLiveAnswer } from "./seo-jsonld.mjs";
+import { GUIDE_PATH } from "./guide.mjs";
 
 function mdPath(lang) {
   return lang === "en" ? "/index.md" : `/${lang}.md`;
@@ -26,15 +27,16 @@ function mdUrl(lang) {
   return `${SITE_ORIGIN}${mdPath(lang)}`;
 }
 
-/** Collapse a free-form tweet summary into a single safe Markdown line. */
-function mdLine(text) {
+/** Preserve full post text while keeping each line inside the Markdown quote. */
+function mdQuote(text) {
   return String(text || "")
-    .replace(/\r?\n+/g, " ")
-    .replace(/^\s*#{1,6}\s*/gm, "")
-    // Neutralize syntax that would break out of the surrounding document.
-    .replace(/`/g, "'")
-    .replace(/([\[\]])/g, "\\$1")
-    .trim();
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/([\\`*_[\]{}()#+.!|~-])/g, "\\$1")
+    .split(/\r\n?|\n/)
+    .map((line) => `> ${line}`)
+    .join("\n");
 }
 
 /** Markdown link line, or an empty string when the URL is not safe. */
@@ -60,9 +62,9 @@ export function buildAnnouncementsMarkdown(resets, lang) {
             : copy.typeRegular || "Regular reset"
         }`,
         "",
-        `> ${mdLine(localizedSummary(item, lang))}`,
+        originalPostText(item) ? mdQuote(originalPostText(item)) : "",
         "",
-        mdLink("View announcement", item.url),
+        mdLink(copy.viewOnX || "View on X", item.url),
         "",
       ].join("\n"),
     )
@@ -92,9 +94,9 @@ export async function renderMarkdown(env, lang) {
           latest.type === "banked" ? copy.typeBanked || "Banked reset" : copy.typeRegular || "Regular reset"
         }`,
         "",
-        `> ${mdLine(localizedSummary(latest, lang))}`,
+        originalPostText(latest) ? mdQuote(originalPostText(latest)) : "",
         "",
-        mdLink("View announcement", latest.url),
+        mdLink(copy.viewOnX || "View on X", latest.url),
         "",
         `${Number(latest.thanksCount ?? 0).toLocaleString("en-US")} people have said thanks.`,
         "",
@@ -179,6 +181,7 @@ export async function renderLlmsTxt(env) {
         `- [${LANG_LABEL[code]} (${code})](${langUrl(code)}): localized tracker and history.`,
     ),
     `- [API documentation](${SITE_ORIGIN}/api-docs): request and response reference for the public endpoints.`,
+    `- [How Antigravity quota works](${SITE_ORIGIN}/guide): the 5-hour window, weekly cap, and what an official reset is.`,
     "",
     "## Markdown versions (LLM friendly)",
     "",
@@ -190,6 +193,8 @@ export async function renderLlmsTxt(env) {
     `- [Reset history JSON](${SITE_ORIGIN}/api/v1/resets): every verified reset with timestamps, announcing account, affected models, and source X links.`,
     `- [Badge SVG](${SITE_ORIGIN}/api/v1/badge.svg): embeddable live status badge.`,
     `- [RSS feed](${SITE_ORIGIN}/feed.xml): verified announcements as RSS 2.0.`,
+    `- [OpenAPI 3.1 specification](${SITE_ORIGIN}/api/openapi.json): machine-readable description of every endpoint.`,
+    `- [Remote MCP server](${SITE_ORIGIN}/mcp): Streamable HTTP Model Context Protocol endpoint with get_status and list_resets tools.`,
     "",
     "## Terminology",
     "",
@@ -233,10 +238,25 @@ export async function renderSitemap(env) {
     ].join("\n");
   }).join("\n");
 
+  const guideEntries = Object.entries(GUIDE_PATH)
+    .map(
+      ([code, path]) =>
+        [
+          "  <url>",
+          `    <loc>${SITE_ORIGIN}${path}</loc>`,
+          `    <lastmod>${lastmod}</lastmod>`,
+          "    <changefreq>monthly</changefreq>",
+          `    <priority>0.7</priority>`,
+          "  </url>",
+        ].join("\n"),
+    )
+    .join("\n");
+
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     homeEntries,
+    guideEntries,
     "  <url>",
     `    <loc>${SITE_ORIGIN}/api-docs</loc>`,
     `    <lastmod>${lastmod}</lastmod>`,
