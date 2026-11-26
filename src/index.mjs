@@ -27,7 +27,7 @@ function redirectStatus(request) {
   return request.method === "GET" || request.method === "HEAD" ? 301 : 308;
 }
 
-export default {
+const app = {
   async scheduled(_controller, env) {
     const result = await drainTelegramOutbox(env);
     if (result.error) throw new Error("Telegram outbox drain failed");
@@ -135,5 +135,17 @@ export default {
     }
 
     return new Response("Not found", { status: 404 });
+  },
+};
+
+export default {
+  scheduled: app.scheduled,
+  async fetch(request, env, ctx) {
+    // Every route matches on GET, so a HEAD request has to run the GET path and
+    // then drop the body. Answering 404 to HEAD would break uptime checks and
+    // link validators that only ask for headers.
+    if (request.method !== "HEAD") return app.fetch(request, env, ctx);
+    const response = await app.fetch(new Request(request, { method: "GET" }), env, ctx);
+    return new Response(null, { status: response.status, headers: response.headers });
   },
 };
