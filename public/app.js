@@ -1095,7 +1095,11 @@ els.emailForm.addEventListener("submit", async (e) => {
       body: JSON.stringify({ email: val, locale: state.locale }),
     });
     if (!res.ok) throw new Error("Subscribe failed");
-    state.emailFeedback = { key: "emailSuccess", value: val };
+    const payload = await res.json().catch(() => ({}));
+    // 202 means a confirmation email went out and nothing is active yet.
+    state.emailFeedback = payload.pendingConfirmation
+      ? { key: "emailPending" }
+      : { key: "emailSuccess", value: val };
     els.emailInput.value = "";
   } catch {
     state.emailFeedback = { key: "emailError" };

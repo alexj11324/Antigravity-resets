@@ -2,6 +2,7 @@ import { OFFICIAL_ACCOUNTS, computeStats } from "./seed-data.mjs";
 import {
   addEmailSubscription,
   addPushSubscription,
+  confirmEmailSubscription,
   createManualReset,
   getActiveExpectedReset,
   getOnlineCount,
@@ -56,7 +57,7 @@ export function unsubscribeSecret(env) {
  * @param {string} secret
  * @param {string} email already normalized to lowercase
  */
-export async function unsubscribeToken(secret, email) {
+export async function hmacToken(secret, message) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -65,11 +66,59 @@ export async function unsubscribeToken(secret, email) {
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(email));
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
   return btoa(String.fromCharCode(...new Uint8Array(signature)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+export async function unsubscribeToken(secret, email) {
+  return hmacToken(secret, email);
+}
+
+/**
+ * Confirmation tokens carry a prefix so a confirmation link can never be
+ * replayed as an unsubscribe link, or the reverse.
+ */
+async function confirmEmailToken(secret, email) {
+  return hmacToken(secret, `confirm:${email}`);
+}
+
+function htmlPage(status, message) {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Antigravity Resets</title></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6"><h1 style="font-size:1.35rem">Antigravity Resets</h1><p>${message}</p><p><a href="https://antigravity-resets.com/">Back to the tracker</a></p></body></html>`,
+    {
+      status,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex",
+      },
+    },
+  );
+}
+
+async function sendConfirmationEmail(env, email, token) {
+  const site = (env?.SITE_URL || "https://antigravity-resets.com").replace(/\/+$/, "");
+  const confirmUrl = `${site}/api/v1/confirm?email=${encodeURIComponent(email)}&token=${token}`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: env.RESEND_FROM_EMAIL,
+      to: [email],
+      subject: "Confirm your Antigravity reset alerts",
+      html:
+        '<p>Someone (hopefully you) asked Antigravity Resets to email reset alerts to this address.</p>' +
+        `<p><a href="${confirmUrl}">Confirm subscription</a></p>` +
+        "<p>If this was not you, ignore this email and nothing will be sent.</p>",
+    }),
+  });
+  if (!res.ok) throw new Error(`resend ${res.status}`);
 }
 
 export function unsubscribeUrl(env, email, token) {
@@ -306,9 +355,34 @@ export async function handleApiRequest(request, env) {
     if (!email || !EMAIL_RE.test(email) || email.length > 254) {
       return json({ error: "Invalid email address" }, 400);
     }
-    const result = await addEmailSubscription(env?.DB, { email, locale });
-    const secret = unsubscribeSecret(env);
+
     const normalized = email.trim().toLowerCase();
+    const secret = unsubscribeSecret(env);
+    // Double opt-in needs a transport to deliver the confirmation. Without one
+    // nothing can be delivered, so the mail-bombing risk does not exist and the
+    // row is stored as already confirmed.
+    const canDeliver = Boolean(env?.RESEND_API_KEY && env?.RESEND_FROM_EMAIL);
+    const needsConfirmation = canDeliver && Boolean(secret);
+
+    const result = await addEmailSubscription(env?.DB, {
+      email: normalized,
+      locale,
+      confirmed: needsConfirmation ? 0 : 1,
+    });
+
+    if (needsConfirmation) {
+      const token = await confirmEmailToken(secret, normalized);
+      try {
+        await sendConfirmationEmail(env, normalized, token);
+      } catch {
+        // The row stays pending; the visitor can submit again.
+        return json({ error: "Could not send the confirmation email" }, 502);
+      }
+      // 202: accepted but not yet active. No unsubscribe link is handed out
+      // until the address is proven to belong to the requester.
+      return json({ ok: true, pendingConfirmation: true }, 202);
+    }
+
     const token = secret ? await unsubscribeToken(secret, normalized) : "";
     return json(
       {
@@ -317,6 +391,28 @@ export async function handleApiRequest(request, env) {
         ...(token ? { unsubscribeUrl: unsubscribeUrl(env, normalized, token) } : {}),
       },
       201,
+    );
+  }
+
+  // GET /api/v1/confirm — completes a double opt-in subscription.
+  if (pathname === "/api/v1/confirm" && request.method === "GET") {
+    const secret = unsubscribeSecret(env);
+    if (!secret) {
+      return htmlPage(503, "Email confirmation is not configured on this deployment.");
+    }
+    const email = (url.searchParams.get("email") || "").trim();
+    const token = (url.searchParams.get("token") || "").trim();
+    if (!email || !EMAIL_RE.test(email) || email.length > 254) {
+      return htmlPage(400, "This confirmation link is incomplete.");
+    }
+    const expected = await confirmEmailToken(secret, email.toLowerCase());
+    if (!token || !timingSafeEqual(token, expected)) {
+      return htmlPage(403, "This confirmation link is invalid. Please subscribe again.");
+    }
+    await confirmEmailSubscription(env?.DB, email);
+    return htmlPage(
+      200,
+      "You are subscribed. Antigravity reset alerts will arrive at this address, and every alert email includes a one-click unsubscribe link.",
     );
   }
 

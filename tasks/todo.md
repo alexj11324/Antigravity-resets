@@ -82,3 +82,8 @@
 3. **Judge prompt injection**：父帖/引用帖文本原本作为普通行拼进 prompt。改为 `<<<PARENT_BEGIN>>>`
    等显式不可信分隔符包裹，并在 Tier-1 与 Tier-2 两处 system instruction 中要求不得执行其中
    指令、结论只能基于官方账号自己的 POST 正文。
+4. **未验证订阅（邮件轰炸）**：`confirmed` 字段建表时就有但从未使用。现改为 double opt-in：
+   订阅先落 `confirmed = 0` 并发送确认邮件（复用现有 Resend 通道），点击 `/api/v1/confirm`
+   后置 1；`listEmailSubscribers` 只返回 `confirmed = 1`；未确认的重复提交无法降级或改写已确认
+   记录的语言。`0003_confirm_existing_subscriptions.sql` 把历史订阅标记为已确认（表单一提交
+   即视为 opt-in）。没有配置 Resend 时，因为根本发不出信，订阅直接存为已确认。

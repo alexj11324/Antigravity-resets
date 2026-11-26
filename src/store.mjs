@@ -514,26 +514,50 @@ export async function getOnlineCount(db) {
   return active > 0 ? active : 1;
 }
 
-export async function addEmailSubscription(db, { email, locale = "en" }) {
+export async function addEmailSubscription(db, { email, locale = "en", confirmed = 0 }) {
   const normalized = email.trim().toLowerCase();
   if (!db) {
     return { email: normalized, stored: false, mode: "preview" };
   }
+  // An unauthenticated caller may create a pending row, but must not be able to
+  // change the locale of an already-confirmed address, and can never clear the
+  // confirmed flag. Confirmation only ever moves 0 -> 1.
   await db
     .prepare(
-      `INSERT INTO email_subscriptions (email, locale)
-       VALUES (?, ?)
-       ON CONFLICT(email) DO UPDATE SET locale = excluded.locale`,
+      `INSERT INTO email_subscriptions (email, locale, confirmed)
+       VALUES (?, ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         locale = CASE
+           WHEN email_subscriptions.confirmed = 1 THEN email_subscriptions.locale
+           ELSE excluded.locale
+         END,
+         confirmed = MAX(email_subscriptions.confirmed, excluded.confirmed)`,
     )
-    .bind(normalized, locale)
+    .bind(normalized, locale, confirmed)
     .run();
-  return { email: normalized, stored: true };
+  return { email: normalized, stored: true, confirmed };
+}
+
+export async function confirmEmailSubscription(db, email) {
+  const normalized = email.trim().toLowerCase();
+  if (!db) {
+    return { email: normalized, confirmed: false, mode: "preview" };
+  }
+  const res = await db
+    .prepare("UPDATE email_subscriptions SET confirmed = 1 WHERE email = ?")
+    .bind(normalized)
+    .run();
+  return { email: normalized, confirmed: (res?.meta?.changes ?? 0) > 0 };
 }
 
 export async function listEmailSubscribers(db) {
   if (!db) return [];
+  // Only confirmed addresses receive alerts: unconfirmed rows are addresses
+  // somebody else typed into the form.
   const res = await db
-    .prepare("SELECT email, locale FROM email_subscriptions ORDER BY created_at ASC")
+    .prepare(
+      "SELECT email, locale FROM email_subscriptions WHERE confirmed = 1 ORDER BY created_at ASC",
+    )
     .all();
   return (res.results || []).map((r) => ({ email: r.email, locale: r.locale || "en" }));
 }
