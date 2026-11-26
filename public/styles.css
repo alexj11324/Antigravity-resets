@@ -1268,6 +1268,18 @@ body {
   color: var(--muted);
 }
 
+/* Marks machine-translated post text so it is never mistaken for the official
+   wording. The original is one click away in the footer link. */
+.bubble-translated {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 1px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--card, transparent);
+}
+
 .bubble-text {
   margin: 0 0 12px;
   font-size: 1rem;

@@ -494,9 +494,17 @@ function renderAnnouncements() {
 
     meta.append(ago, exact);
 
+    const translated = item.textI18n && item.textI18n[state.locale];
+    if (translated) {
+      const badge = document.createElement("span");
+      badge.className = "bubble-translated";
+      badge.textContent = c.autoTranslated;
+      meta.append(badge);
+    }
+
     const text = document.createElement("p");
     text.className = "bubble-text";
-    text.textContent = originalPostText(item) || c.viewOnX;
+    text.textContent = translated || originalPostText(item) || c.viewOnX;
     text.style.whiteSpace = "pre-wrap";
 
     const foot = document.createElement("div");
