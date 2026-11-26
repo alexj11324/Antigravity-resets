@@ -1309,20 +1309,44 @@ test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and signed 
 
   // Tokens only ever come from mail; mint one the way the server does.
   const { unsubscribeToken } = await import("../src/api.mjs");
-  const { addEmailSubscription } = await import("../src/store.mjs");
+  const { addEmailSubscription, listEmailSubscribers } = await import("../src/store.mjs");
   await addEmailSubscription(db, { email: "user@example.com", confirmed: 1 });
   const token = await unsubscribeToken(env.EMAIL_UNSUBSCRIBE_SECRET, "user@example.com");
+  const unsubUrl = `https://antigravity-resets.com/api/v1/unsubscribe?email=user%40example.com&token=${token}`;
 
-  const unsubRes = await worker.fetch(
-    new Request(
-      `https://antigravity-resets.com/api/v1/unsubscribe?email=user%40example.com&token=${token}`,
-    ),
+  // GET only renders a form. A mail scanner prefetching the link must not
+  // remove anything, and HEAD is served by the same path, so it must not
+  // either.
+  const formRes = await worker.fetch(new Request(unsubUrl), env);
+  assert.equal(formRes.status, 200);
+  assert.match(await formRes.text(), /<form method="post"/);
+  assert.equal((await listEmailSubscribers(db)).length, 1, "GET must not unsubscribe");
+
+  const headRes = await worker.fetch(new Request(unsubUrl, { method: "HEAD" }), env);
+  assert.equal(headRes.status, 200);
+  assert.equal(await headRes.text(), "");
+  assert.equal((await listEmailSubscribers(db)).length, 1, "HEAD must not unsubscribe");
+
+  // Only the explicit POST removes the address.
+  const unsubRes = await worker.fetch(new Request(unsubUrl, { method: "POST" }), env);
+  assert.equal(unsubRes.status, 200);
+  assert.match(await unsubRes.text(), /unsubscribed/i);
+  assert.equal((await listEmailSubscribers(db)).length, 0);
+
+  // API clients that post JSON still get JSON, and it never discloses whether
+  // the address had been subscribed.
+  await addEmailSubscription(db, { email: "user@example.com", confirmed: 1 });
+  const jsonRes = await worker.fetch(
+    new Request("https://antigravity-resets.com/api/v1/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "user@example.com", token }),
+    }),
     env,
   );
-  assert.equal(unsubRes.status, 200);
-  const unsubBody = await unsubRes.json();
+  assert.equal(jsonRes.status, 200);
+  const unsubBody = await jsonRes.json();
   assert.equal(unsubBody.ok, true);
-  // Never disclose whether the address was subscribed.
   assert.equal(unsubBody.removed, undefined);
 });
 
