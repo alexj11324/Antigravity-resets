@@ -106,6 +106,13 @@ const allowed = new Set([
   "ADMIN_TELEGRAM_CHAT_ID",
   "RESEND_API_KEY",
   "RESEND_FROM_EMAIL",
+  // Dedicated signing key for confirm/unsubscribe links. Deliberately separate
+  // from X_OAUTH2_CLIENT_SECRET: reusing the webhook key here would turn the
+  // subscribe endpoint into an HMAC oracle over webhook signatures.
+  "EMAIL_UNSUBSCRIBE_SECRET",
+  // Optional: sender address when delivering through Cloudflare Email Sending
+  // instead of Resend.
+  "EMAIL_FROM",
 ]);
 const raw = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 const entries = Array.isArray(raw)
