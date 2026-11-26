@@ -376,9 +376,32 @@ const EDGE_CACHE_TTL = Object.freeze({
 });
 
 /**
- * Serve a GET from the colo cache when possible. Keys on the full URL, so
- * query variants (type, limit) cache separately. Failures here must never take
- * the route down: any cache error falls through to the live handler.
+ * Canonical cache key: only the parameters the handler actually reads, after
+ * the same validation the handler applies. Keying on the raw URL would let
+ * anyone mint unbounded distinct entries with junk query strings and evict the
+ * real ones from the shared cache.
+ * @param {URL} url
+ * @returns {string}
+ */
+function canonicalCacheUrl(url) {
+  if (url.pathname === "/api/v1/resets") {
+    const typeParam = url.searchParams.get("type");
+    const type = typeParam === "regular" || typeParam === "banked" ? typeParam : "";
+    const limitParam = Number(url.searchParams.get("limit"));
+    const limit =
+      Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 200
+        ? String(limitParam)
+        : "";
+    return `${url.origin}${url.pathname}?type=${type}&limit=${limit}`;
+  }
+  return `${url.origin}${url.pathname}`;
+}
+
+/**
+ * Serve a GET from the colo cache when possible. Keys on the canonical URL, so
+ * junk parameters collapse onto one entry and valid query variants (type,
+ * limit) still cache separately. Failures here must never take the route down:
+ * any cache error falls through to the live handler.
  * @param {Request} request
  * @param {number} ttl seconds
  * @param {() => Promise<Response>} build
@@ -387,7 +410,7 @@ const EDGE_CACHE_TTL = Object.freeze({
 async function edgeCached(request, ttl, build) {
   if (typeof caches === "undefined" || request.method !== "GET") return build();
   const cache = caches.default;
-  const key = new Request(request.url, { method: "GET" });
+  const key = new Request(canonicalCacheUrl(new URL(request.url)), { method: "GET" });
 
   try {
     const hit = await cache.match(key);
