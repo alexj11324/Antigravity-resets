@@ -355,7 +355,11 @@ async function callTool(name, args, env) {
   }
 
   if (name === "list_resets") {
-    return toolText(buildResetPage(data.resets, args ?? {}));
+    // `source` keeps the pre-pagination contract: earlier clients read it.
+    return toolText({
+      ...buildResetPage(data.resets, args ?? {}),
+      source: `${SITE_ORIGIN}/api/v1/resets`,
+    });
   }
 
   throw new ToolInputError(`Unknown tool: ${name}`);

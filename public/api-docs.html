@@ -95,6 +95,25 @@
           <pre class="code-box"><code>![Antigravity Reset](https://antigravity-resets.com/api/v1/badge.svg)</code></pre>
         </section>
 
+        <section class="docs-card" id="mcp">
+          <div>
+            <span class="docs-method">POST</span>
+            <span class="docs-path">/mcp</span>
+          </div>
+          <p class="section-sub">
+            Remote Model Context Protocol server (Streamable HTTP, JSON-RPC 2.0), so AI agents can query the tracker instead of scraping the page. Two read-only tools: <code>get_status</code> returns the latest reset, any scheduled reset awaiting evidence, and aggregate statistics; <code>list_resets</code> returns the archive with <code>type</code>, <code>from</code>, <code>to</code>, <code>order</code>, <code>limit</code>, and opaque cursor pagination. No auth, no key.
+          </p>
+          <pre class="code-box"><code>claude mcp add --transport http antigravity-resets https://antigravity-resets.com/mcp</code></pre>
+          <pre class="code-box"><code>{
+  "mcpServers": {
+    "antigravity-resets": {
+      "type": "http",
+      "url": "https://antigravity-resets.com/mcp"
+    }
+  }
+}</code></pre>
+        </section>
+
         <section class="docs-card">
           <div>
             <span class="docs-method">GET / POST</span>
