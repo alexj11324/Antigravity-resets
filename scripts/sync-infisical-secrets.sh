@@ -137,11 +137,48 @@ console.error("Matched secret keys (" + keys.length + "):", keys.join(", "));
 if [[ "$MODE" == "local" ]]; then
   node -e '
   const fs = require("node:fs");
-  const obj = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const lines = Object.entries(obj).map(([k, v]) => `${k}=${JSON.stringify(v)}`);
-  fs.writeFileSync(".dev.vars", lines.join("\n") + "\n", { mode: 0o600 });
+  const target = ".dev.vars";
+
+  const incoming = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+
+  // Merge, never overwrite. .dev.vars can hold variables this script does not
+  // manage (local overrides, feature flags), and the previous version replaced
+  // the whole file, silently deleting them.
+  let existing = "";
+  try {
+    existing = fs.readFileSync(target, "utf8");
+  } catch {
+    existing = "";
+  }
+
+  const managed = new Map(
+    Object.entries(incoming).map(([key, value]) => [key, `${key}=${JSON.stringify(value)}`]),
+  );
+  const written = new Set();
+  const out = [];
+
+  for (const line of existing.split("\n")) {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(line);
+    if (match && managed.has(match[1])) {
+      out.push(managed.get(match[1]));
+      written.add(match[1]);
+    } else {
+      out.push(line);
+    }
+  }
+  for (const [key, rendered] of managed) {
+    if (!written.has(key)) out.push(rendered);
+  }
+  while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
+
+  // Temp file + rename so an interrupted run cannot truncate the real file,
+  // then force 0600: writeFileSync mode only applies when creating.
+  const tmp = `${target}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, out.join("\n") + "\n", { mode: 0o600 });
+  fs.renameSync(tmp, target);
+  fs.chmodSync(target, 0o600);
   ' "$TMP_FILTERED"
-  echo "Wrote .dev.vars (chmod 600, gitignored) from Infisical env=$INFISICAL_ENV."
+  echo "Merged Infisical secrets into .dev.vars (env=$INFISICAL_ENV, chmod 600, gitignored)."
 else
   npx --yes wrangler secret bulk "$TMP_FILTERED"
   echo "Synced Infisical secrets (env=$INFISICAL_ENV) to Cloudflare Workers."
