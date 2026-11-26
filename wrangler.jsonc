@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "antigravity-resets",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-11-01",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Optional: Cloudflare Email Sending. Cheaper than Resend on Workers Paid
+  // (3,000/month included, no 100/day cap) but the sending domain must be
+  // enabled first:
+  //   npx wrangler email sending enable antigravity-resets.com
+  // Then uncomment the block below and deploy. Until then the Worker falls back
+  // to Resend whenever RESEND_API_KEY and RESEND_FROM_EMAIL are set.
+  "send_email": [{ "name": "EMAIL" }],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Every request must reach the Worker: www -> apex redirects, canonical
+    // locale routes, and HTMLRewriter injection all live there. Static files
+    // are still served through env.ASSETS.fetch().
+    "run_worker_first": ["/*"]
+  },
+  "routes": [
+    {
+      "pattern": "antigravity-resets.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.antigravity-resets.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "webhooks.antigravity-resets.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "WATCHED_X_HANDLES": "_mohansolo,_anshulr,antigravity",
+    "SITE_URL": "https://antigravity-resets.com",
+    "DECISIONS_MODEL": "gemini-decision-1",
+    "FLASH_MODEL": "gemini-3.8-flash",
+    "ARBITRATOR_MODEL": "gemini-4-neon",
+    "ENABLE_TIER2_ARBITRATOR": "true",
+    "JOINT_JUDGE_MODE": "strict"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "antigravity-resets",
+      "database_id": "a0eec19c-ce3a-4a7f-bbc7-aa6ecee1bcb7",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

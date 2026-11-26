@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+*.log
+
+# Local agent tooling, not part of the deployable project
+.agents/
+.claude/
+.devin/

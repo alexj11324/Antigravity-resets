@@ -1,0 +1,20 @@
+{
+  "name": "antigravity-resets",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live Google Antigravity quota reset tracker powered by Cloudflare Workers, D1, and X webhooks.",
+  "scripts": {
+    "dev": "node scripts/local-server.mjs",
+    "dev:worker": "npx wrangler dev",
+    "dev:infisical": "infisical run --env=dev -- npx wrangler dev",
+    "test": "node --test test/*.test.mjs",
+    "db:migrate:local": "npx wrangler d1 migrations apply antigravity-resets --local",
+    "db:migrate:remote": "npx wrangler d1 migrations apply antigravity-resets --remote",
+    "secrets:sync": "bash scripts/sync-infisical-secrets.sh",
+    "deploy": "npx wrangler deploy"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
