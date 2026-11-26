@@ -3,8 +3,8 @@
 //
 // Runs from the every-minute cron, a couple of rows per tick, so a new reset is
 // translated shortly after it lands without slowing the webhook path or the
-// public API. A failed run leaves the row untranslated (the UI falls back to
-// the original) and is retried after an hour at most.
+// public API. A failure is retried on a short exponential backoff, not after a
+// fixed hour: most failures are transient model errors.
 
 import { seedQuoteFor } from "./store.mjs";
 
@@ -18,9 +18,20 @@ const SCHEMA_LOCALE_KEYS = {
 const DEFAULT_API_ORIGIN = "https://generativelanguage.googleapis.com";
 const DEFAULT_MODEL = "gemini-3.8-flash";
 const INTERACTIONS_API_REVISION = "2026-05-20";
-const RETRY_AFTER_MS = 60 * 60 * 1000;
+const RETRY_BASE_MS = 30 * 1000;
+const RETRY_MAX_MS = 60 * 60 * 1000;
 const TIMEOUT_MS = 10_000;
 const MAX_SOURCE_CHARS = 4000;
+
+/**
+ * Delay before retrying a row, from its consecutive failure count:
+ * 30s, 1m, 2m, 4m, 8m, 16m, 32m, then an hour.
+ * @param {number} failures
+ * @returns {number} milliseconds
+ */
+export function retryDelayMs(failures) {
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(Math.max(failures, 0), 7));
+}
 
 const RESPONSE_SCHEMA = {
   type: "object",
@@ -71,17 +82,19 @@ function extractText(data) {
 }
 
 /**
- * Translate one post. Returns a locale map, or null when the model produced
- * nothing usable. Never throws: a bad translation must not break the cron.
+ * Translate one post. Never throws: a bad translation must not break the cron.
+ * Returns the locale map, or the reason nothing usable came back so the caller
+ * can log it instead of guessing.
  * @param {object} env
  * @param {string} text
  * @param {typeof fetch} fetchImpl
- * @returns {Promise<Record<string, string>|null>}
+ * @returns {Promise<{map: Record<string, string>|null, error: string|null}>}
  */
 export async function translatePost(env, text, fetchImpl = fetch) {
   const apiKey = env?.GEMINI_API_KEY;
   const source = String(text || "").trim().slice(0, MAX_SOURCE_CHARS);
-  if (!apiKey || !source) return null;
+  if (!apiKey) return { map: null, error: "GEMINI_API_KEY is not configured" };
+  if (!source) return { map: null, error: "empty source text" };
 
   const model = env?.TRANSLATE_MODEL || env?.FLASH_MODEL || DEFAULT_MODEL;
   const controller = new AbortController();
@@ -108,10 +121,10 @@ export async function translatePost(env, text, fetchImpl = fetch) {
         },
       }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) return { map: null, error: `model returned HTTP ${response.status}` };
 
     const raw = extractText(await response.json());
-    if (!raw) return null;
+    if (!raw) return { map: null, error: "model returned no text" };
     const parsed = JSON.parse(
       raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
     );
@@ -126,9 +139,13 @@ export async function translatePost(env, text, fetchImpl = fetch) {
       if (!trimmed || trimmed === source) continue;
       translations[locale] = trimmed.slice(0, MAX_SOURCE_CHARS);
     }
-    return Object.keys(translations).length >= 2 ? translations : null;
-  } catch {
-    return null;
+    if (Object.keys(translations).length < 2) {
+      return { map: null, error: "model returned too few usable translations" };
+    }
+    return { map: translations, error: null };
+  } catch (error) {
+    const reason = error?.name === "AbortError" ? "request timed out" : "request failed";
+    return { map: null, error: reason };
   } finally {
     clearTimeout(timer);
   }
@@ -143,45 +160,77 @@ export async function translatePost(env, text, fetchImpl = fetch) {
  */
 export async function translatePendingResets(env, limit = 2, fetchImpl = fetch) {
   const db = env?.DB;
-  if (!db || !env?.GEMINI_API_KEY) return { translated: 0, failed: 0 };
+  if (!db || !env?.GEMINI_API_KEY) {
+    return { translated: 0, failed: 0, skipped: 0, details: [] };
+  }
 
-  const cutoff = new Date(Date.now() - RETRY_AFTER_MS).toISOString();
   const rows = await db
     .prepare(
-      "SELECT id, tweet_id, quote_text FROM resets " +
-        "WHERE text_i18n_json IS NULL " +
-        "AND (translation_attempted_at IS NULL OR translation_attempted_at < ?) " +
-        "ORDER BY timestamp DESC LIMIT ?",
+      "SELECT id, tweet_id, quote_text, translation_failures, translation_attempted_at " +
+        "FROM resets WHERE text_i18n_json IS NULL " +
+        "ORDER BY timestamp DESC LIMIT 200",
     )
-    .bind(cutoff, Math.max(1, Math.min(10, limit)))
     .all();
+
+  // Pick rows whose backoff has elapsed. Filtering here rather than in SQL
+  // keeps the delay a function of the row's own failure count; a row that keeps
+  // failing must not block the ones behind it.
+  const now = Date.now();
+  const pageSize = Math.max(1, Math.min(10, limit));
+  const eligible = [];
+  let skipped = 0;
+  for (const row of rows?.results || []) {
+    const failures = Number(row.translation_failures || 0);
+    const attemptedMs = row.translation_attempted_at
+      ? Date.parse(row.translation_attempted_at)
+      : Number.NaN;
+    if (Number.isFinite(attemptedMs) && now - attemptedMs < retryDelayMs(failures)) {
+      skipped += 1;
+      continue;
+    }
+    eligible.push(row);
+    if (eligible.length === pageSize) break;
+  }
 
   let translated = 0;
   let failed = 0;
-  const attemptedAt = new Date().toISOString();
-  for (const row of rows?.results || []) {
+  const details = [];
+  for (const row of eligible) {
     // Seeded rows predate quote_text storage; resolve their text from the seed
     // table so the backfill still covers them.
     const source = row.quote_text?.trim() || seedQuoteFor(row.tweet_id);
-    if (!source) continue;
-    const map = await translatePost(env, source, fetchImpl);
+    if (!source) {
+      skipped += 1;
+      details.push({ id: row.id, ok: false, reason: "no source text" });
+      continue;
+    }
+
+    const attemptedAt = new Date().toISOString();
+    const { map, error } = await translatePost(env, source, fetchImpl);
     if (map) {
       await db
         .prepare(
-          "UPDATE resets SET text_i18n_json = ?, translation_attempted_at = ? WHERE id = ?",
+          "UPDATE resets SET text_i18n_json = ?, translation_attempted_at = ?, translation_failures = 0 WHERE id = ?",
         )
         .bind(JSON.stringify(map), attemptedAt, row.id)
         .run();
       translated += 1;
+      details.push({ id: row.id, ok: true });
     } else {
       await db
-        .prepare("UPDATE resets SET translation_attempted_at = ? WHERE id = ?")
+        .prepare(
+          "UPDATE resets SET translation_attempted_at = ?, translation_failures = translation_failures + 1 WHERE id = ?",
+        )
         .bind(attemptedAt, row.id)
         .run();
       failed += 1;
+      // Logged so `wrangler tail` can show why a row is stuck without storing
+      // model output anywhere.
+      console.error("translation_failed", row.id, error);
+      details.push({ id: row.id, ok: false, reason: error });
     }
   }
-  return { translated, failed };
+  return { translated, failed, skipped, details };
 }
 
 export { TARGET_LOCALES };
