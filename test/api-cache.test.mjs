@@ -124,3 +124,63 @@ test("write routes never consult the colo cache", async (t) => {
   );
   assert.equal(lookups, 0);
 });
+
+function installCache(entries) {
+  globalThis.caches = {
+    default: {
+      async match(key) {
+        const hit = entries.get(key.url);
+        return hit ? hit.clone() : undefined;
+      },
+      async put(key, response) {
+        entries.set(key.url, response.clone());
+      },
+    },
+  };
+}
+
+test("junk query strings collapse onto one cache entry", async (t) => {
+  // Keying on the raw URL would let anyone mint unbounded entries and evict
+  // the real ones; the handler ignores these parameters anyway.
+  const entries = new Map();
+  installCache(entries);
+  t.after(() => {
+    delete globalThis.caches;
+  });
+
+  const first = await worker.fetch(new Request(`${SITE}/api/v1/status?utm_source=spam`), {});
+  assert.equal(first.headers.get("x-edge-cache"), "MISS");
+
+  const second = await worker.fetch(
+    new Request(`${SITE}/api/v1/status?junk=${Math.random()}`),
+    {},
+  );
+  assert.equal(second.headers.get("x-edge-cache"), "HIT");
+  assert.equal(entries.size, 1, "both requests must share one entry");
+});
+
+test("valid query variants keep separate entries", async (t) => {
+  const entries = new Map();
+  installCache(entries);
+  t.after(() => {
+    delete globalThis.caches;
+  });
+
+  await worker.fetch(new Request(`${SITE}/api/v1/resets?limit=2`), {});
+  await worker.fetch(new Request(`${SITE}/api/v1/resets?limit=3`), {});
+  assert.equal(entries.size, 2);
+});
+
+test("out-of-range limits collapse onto the default representation", async (t) => {
+  // The handler ignores limit=999, so it must not earn its own cache entry.
+  const entries = new Map();
+  installCache(entries);
+  t.after(() => {
+    delete globalThis.caches;
+  });
+
+  await worker.fetch(new Request(`${SITE}/api/v1/resets`), {});
+  const second = await worker.fetch(new Request(`${SITE}/api/v1/resets?limit=999`), {});
+  assert.equal(second.headers.get("x-edge-cache"), "HIT");
+  assert.equal(entries.size, 1);
+});
