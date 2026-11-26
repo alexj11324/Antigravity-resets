@@ -131,6 +131,103 @@ test("a repeated subscribe request is throttled instead of mailing again", async
   assert.equal(sent.length, 1, "the second request inside the cooldown must not send mail");
 });
 
+test("a cooldown rejection must not spend the shared hourly send budget", async (t) => {
+  // The exploit this pins: with the global slot reserved before the per-address
+  // cooldown, posting one address over and over burns the cap on responses that
+  // send nothing, and every other subscriber is locked out for the hour.
+  const db = createMemoryD1();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response("{}", { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const env = {
+    DB: db,
+    EMAIL_UNSUBSCRIBE_SECRET: "s",
+    RESEND_API_KEY: "k",
+    RESEND_FROM_EMAIL: "a@b.com",
+  };
+  const post = (email) =>
+    worker.fetch(
+      new Request(`${SITE}/api/v1/subscribe/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }),
+      env,
+    );
+
+  const windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
+  db.sql
+    .prepare("INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 0)")
+    .run(windowStart);
+  db.sql.prepare("UPDATE email_send_log SET sent = 98 WHERE window_start = ?").run(windowStart);
+
+  // One slot left. First post spends it and mails.
+  assert.equal((await post("repeat@example.com")).status, 202);
+  assert.equal(sent.length, 1);
+
+  // Second post is refused by the cooldown. It must not touch the counter.
+  assert.equal((await post("repeat@example.com")).status, 202);
+  assert.equal(sent.length, 1, "cooldown must suppress the second mail");
+  assert.equal(
+    db.sql.prepare("SELECT sent FROM email_send_log WHERE window_start = ?").get(windowStart).sent,
+    99,
+    "a rejected request must not consume a send slot",
+  );
+
+  // The remaining slot is still available to a different address. Under the
+  // old ordering this request got 429 and the whole feature was down.
+  assert.equal((await post("fresh@example.com")).status, 202);
+  assert.equal(sent.length, 2);
+});
+
+test("the hourly cap still refuses work once it is actually spent", async (t) => {
+  const db = createMemoryD1();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response("{}", { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const env = {
+    DB: db,
+    EMAIL_UNSUBSCRIBE_SECRET: "s",
+    RESEND_API_KEY: "k",
+    RESEND_FROM_EMAIL: "a@b.com",
+  };
+
+  // Seed the current and next window so an hour rollover mid-test cannot flake.
+  const hour = 3600000;
+  for (const offset of [0, hour]) {
+    const key = new Date(Math.floor((Date.now() + offset) / hour) * hour).toISOString();
+    db.sql
+      .prepare("INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 100)")
+      .run(key);
+    db.sql.prepare("UPDATE email_send_log SET sent = 100 WHERE window_start = ?").run(key);
+  }
+
+  const res = await worker.fetch(
+    new Request(`${SITE}/api/v1/subscribe/email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "late@example.com" }),
+    }),
+    env,
+  );
+  assert.equal(res.status, 429);
+  assert.equal(sent.length, 0, "a refused request must not mail");
+});
+
 test("a tampered confirmation token is rejected", async () => {
   const db = createMemoryD1();
   const env = { DB: db, EMAIL_UNSUBSCRIBE_SECRET: "test-secret" };

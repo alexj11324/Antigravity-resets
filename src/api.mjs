@@ -464,10 +464,37 @@ export async function handleApiRequest(request, env) {
         // Already active. Sending another confirmation would only be noise.
         return json({ ok: true, pendingConfirmation: false }, 200);
       }
+    }
 
-      // Reserve an hourly send slot atomically before dispatching. Counting rows
-      // missed repeat submits; counting sends and doing it as a conditional
-      // increment means the cap holds under concurrency.
+    // Create the pending row before the cooldown claim; the claim is a
+    // conditional UPDATE and would match nothing for a first-time address.
+    await addEmailSubscription(env?.DB, { email: normalized, locale, confirmed: 0 });
+
+    if (env?.DB) {
+      // Claim the per-address cooldown with a conditional UPDATE rather than a
+      // read-then-write: two concurrent requests could both pass the old check
+      // and both send. Only the request that wins the row dispatches mail.
+      //
+      // This runs BEFORE the global slot is reserved, and the order is load
+      // bearing: a request rejected here sends nothing, so it must not consume
+      // shared budget. With the reverse order, one address posted 100 times
+      // burns the hourly cap on 99 no-op responses and blocks every other
+      // subscriber -- an unauthenticated denial of service on the whole feature.
+      const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const claim = await env.DB.prepare(
+        "UPDATE email_subscriptions SET confirmation_sent_at = ? " +
+          "WHERE email = ? AND (confirmation_sent_at IS NULL OR confirmation_sent_at < ?)",
+      )
+        .bind(new Date().toISOString(), normalized, cutoff)
+        .run();
+      if (Number(claim?.meta?.changes || 0) === 0) {
+        // Another request already sent inside the cooldown window.
+        return json({ ok: true, pendingConfirmation: true }, 202);
+      }
+
+      // Only a request that won the cooldown can dispatch, so only it spends a
+      // slot here. Conditional increment, not a row count: repeat submits used
+      // to slip past a count, and the increment stays correct under concurrency.
       const windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
       await env.DB.prepare(
         "INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 0)",
@@ -480,26 +507,10 @@ export async function handleApiRequest(request, env) {
         .bind(windowStart)
         .run();
       if (Number(reservation?.meta?.changes || 0) === 0) {
+        // Budget is gone for this hour. The address keeps its claim so an
+        // exhausted hour cannot be hammered either; it retries once the
+        // cooldown lapses.
         return json({ error: "Too many subscription attempts right now" }, 429);
-      }
-    }
-
-    await addEmailSubscription(env?.DB, { email: normalized, locale, confirmed: 0 });
-
-    // Claim the per-address cooldown with a conditional UPDATE rather than a
-    // read-then-write: two concurrent requests could both pass the old check
-    // and both send. Only the request that wins the row dispatches mail.
-    if (env?.DB) {
-      const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const claim = await env.DB.prepare(
-        "UPDATE email_subscriptions SET confirmation_sent_at = ? " +
-          "WHERE email = ? AND (confirmation_sent_at IS NULL OR confirmation_sent_at < ?)",
-      )
-        .bind(new Date().toISOString(), normalized, cutoff)
-        .run();
-      if (Number(claim?.meta?.changes || 0) === 0) {
-        // Another request already sent inside the cooldown window.
-        return json({ ok: true, pendingConfirmation: true }, 202);
       }
     }
 
