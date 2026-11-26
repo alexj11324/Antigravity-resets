@@ -27,3 +27,35 @@ a subsequent legitimate request still gets the last unit. Revert the fix and
 confirm the test fails — otherwise it is not testing the ordering. For a refund
 or compensation branch, neutralize that statement (`sent - 1` → `sent + 0`) and
 confirm the test fails; a test that passes either way proves nothing about it.
+
+## Cloudflare Cache Rules do not cache a Worker's own response
+
+Creating a Cache Rule with `cache: true` for `/api/*` changed nothing: no
+`cf-cache-status` appeared and every request still reached the Worker and D1.
+The rule is evaluated around the Worker, but the Worker is the origin, so by
+the time Cloudflare can cache anything the database read has already happened.
+
+**Rule:** to cache Worker output, call `caches.default.match` / `put` in the
+Worker. Verify with an explicit header (`X-Edge-Cache`), because the absence of
+`cf-cache-status` is the only clue that nothing is being cached.
+
+**Second trap in the same rule:** once caching did work, the response came back
+with `max-age=14400` (the zone's 4-hour Browser Cache TTL) even though the
+origin said 15 seconds. A browser polling the API would have shown four-hour-old
+data. Set `browser_ttl: { mode: "respect_origin" }` (and usually
+`edge_ttl: { mode: "respect_origin" }`) so the origin's TTL wins.
+
+**Free plan:** the rate limiting API rejects any `mitigation_timeout` other than
+10 with "not entitled to use a mitigation timeout different from 10". One rule
+is allowed per zone; block returns 429 for the mitigation window.
+
+## A GET that mutates state breaks under HEAD and prefetch
+
+`GET /api/v1/unsubscribe` removed the subscription. Mail scanners prefetch
+links, and a HEAD request is served by the GET path, so either could
+unsubscribe a reader who never clicked. Same class as the earlier confirm link.
+
+**Rule:** state changes are POST-only. A GET behind an email link renders a
+confirmation form; the form posts. When adding a global HEAD → GET shim, audit
+every GET route for writes first — the shim makes an existing bad GET easier to
+trigger, it does not create the bug.
