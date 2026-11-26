@@ -361,7 +361,8 @@ test("Public API serves all 17 verified X status URLs and handles batched multi-
     }),
     env,
   );
-  assert.equal(goodEmailRes.status, 201);
+  // No mail transport and no signing secret in this env: subscribe fails closed.
+  assert.equal(goodEmailRes.status, 503);
 
   const authAdmin = await worker.fetch(
     new Request("https://antigravity-resets.com/api/v1/admin/resets", {
@@ -578,16 +579,16 @@ test("Official X Activity post.create signed replay parses data.payload + data.i
     __fetchImpl: mockFetch,
   };
 
-  // Seed one isolated email subscriber
-  const subRes = await worker.fetch(
-    new Request("https://antigravity-resets.com/api/v1/subscribe/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "subscriber@example.com", locale: "zh-CN" }),
-    }),
-    env,
-  );
-  assert.equal(subRes.status, 201);
+  // Seed one confirmed subscriber directly. The HTTP path now requires double
+  // opt-in, which email-subscription.test.mjs covers on its own.
+  {
+    const { addEmailSubscription } = await import("../src/store.mjs");
+    await addEmailSubscription(db, {
+      email: "subscriber@example.com",
+      locale: "zh-CN",
+      confirmed: 1,
+    });
+  }
 
   const payload = makeOfficialActivityPostCreate({
     eventUuid: "evt-official-001",
@@ -1281,7 +1282,9 @@ test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and signed 
   assert.match(badgeRes.headers.get("Content-Type"), /image\/svg\+xml/);
   assert.match(await badgeRes.text(), /antigravity reset/);
 
-  const subRes = await worker.fetch(
+  // Subscribe fails closed: it needs a dedicated signing secret AND a mail
+  // transport, otherwise an address could never be verified.
+  const noTransport = await worker.fetch(
     new Request("https://antigravity-resets.com/api/v1/subscribe/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1289,10 +1292,7 @@ test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and signed 
     }),
     env,
   );
-  assert.equal(subRes.status, 201);
-  const subBody = await subRes.json();
-  assert.ok(subBody.unsubscribeUrl, "subscribe must return a signed unsubscribe URL");
-  assert.match(subBody.unsubscribeUrl, /token=/);
+  assert.equal(noTransport.status, 503);
 
   // A bare email in the query string must not be enough to unsubscribe someone.
   const unsigned = await worker.fetch(
@@ -1307,7 +1307,18 @@ test("Product endpoints serve RSS /feed.xml, live /api/v1/badge.svg, and signed 
   );
   assert.equal(forged.status, 403);
 
-  const unsubRes = await worker.fetch(new Request(subBody.unsubscribeUrl), env);
+  // Tokens only ever come from mail; mint one the way the server does.
+  const { unsubscribeToken } = await import("../src/api.mjs");
+  const { addEmailSubscription } = await import("../src/store.mjs");
+  await addEmailSubscription(db, { email: "user@example.com", confirmed: 1 });
+  const token = await unsubscribeToken(env.EMAIL_UNSUBSCRIBE_SECRET, "user@example.com");
+
+  const unsubRes = await worker.fetch(
+    new Request(
+      `https://antigravity-resets.com/api/v1/unsubscribe?email=user%40example.com&token=${token}`,
+    ),
+    env,
+  );
   assert.equal(unsubRes.status, 200);
   const unsubBody = await unsubRes.json();
   assert.equal(unsubBody.ok, true);

@@ -4,7 +4,13 @@ import {
   parseWatchedHandles,
 } from "./reset-classifier.mjs";
 import { judgeResetTweet } from "./joint-judge.mjs";
-import { unsubscribeSecret, unsubscribeToken, unsubscribeUrl } from "./api.mjs";
+import {
+  deliverEmail,
+  emailTransport,
+  unsubscribeSecret,
+  unsubscribeToken,
+  unsubscribeUrl,
+} from "./api.mjs";
 import {
   listEmailSubscribers,
   recordWebhookEventAndResets,
@@ -164,7 +170,7 @@ export function formatExpectedTelegramHtml(
 }
 
 async function notifyEmailSubscribers(env, reset, fetchImpl = fetch, { isExpected = false } = {}) {
-  if (!env?.RESEND_API_KEY || !env?.RESEND_FROM_EMAIL || !env?.DB) return;
+  if (!emailTransport(env) || !env?.DB) return;
   const siteUrl = (env.SITE_URL || "https://antigravity-resets.com").replace(/\/+$/, "");
   const etaLabel = isExpected ? formatExpectedUtcLabel(reset.expectedBy) : null;
   const kind = reset.type === "banked" ? "Antigravity banked reset" : "Antigravity reset";
@@ -195,19 +201,15 @@ async function notifyEmailSubscribers(env, reset, fetchImpl = fetch, { isExpecte
       ? unsubscribeUrl(env, sub.email, unsubToken)
       : `${siteUrl}/api/v1/unsubscribe`;
     try {
-      await fetchImpl("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: env.RESEND_FROM_EMAIL,
-          to: [sub.email],
+      await deliverEmail(
+        env,
+        {
+          to: sub.email,
           subject,
           text: `${subject}\n\n"${localized}"\n\nView on X: ${reset.url}\nLive tracker: ${siteUrl}\n\nUnsubscribe: ${unsubUrl}`,
-        }),
-      });
+        },
+        fetchImpl,
+      );
     } catch (err) {
       console.error(
         JSON.stringify({ event: "email_notify_failed", message: String(err) }),

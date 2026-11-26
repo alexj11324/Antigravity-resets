@@ -1,4 +1,9 @@
--- Rows created before double opt-in were submitted through the site form by
--- the address owner, which is itself the opt-in signal. New rows start with
--- confirmed = 0 and only become active after the confirmation email is clicked.
-UPDATE email_subscriptions SET confirmed = 1;
+-- Intentionally a no-op.
+--
+-- An earlier revision mass-confirmed every legacy row. That would have
+-- activated addresses nobody re-verified, which defeats the point of double
+-- opt-in: an unconfirmed row is exactly an address somebody typed into a public
+-- form. Legacy rows therefore stay confirmed = 0. Their owners can subscribe
+-- again, and a one-time reconfirmation send can be run separately once someone
+-- decides that is the right call for the addresses on file.
+SELECT 1;

@@ -79,14 +79,56 @@ test("with a mail transport, subscribe returns 202 and mails a confirmation link
   // Still not mailable until the link is followed.
   assert.equal((await listEmailSubscribers(db)).length, 0);
 
-  const confirmUrl = sent[0].body.html.match(/href="([^"]*\/api\/v1\/confirm[^"]*)"/)[1]
+  const confirmUrl = sent[0].body.html
+    .match(/href="([^"]*\/api\/v1\/confirm[^"]*)"/)[1]
     .replace(/&amp;/g, "&");
-  const confirmRes = await worker.fetch(new Request(confirmUrl), env);
-  assert.equal(confirmRes.status, 200);
+
+  // A mail scanner or link prefetcher hitting the URL must NOT subscribe anyone.
+  const getRes = await worker.fetch(new Request(confirmUrl), env);
+  assert.equal(getRes.status, 200);
+  assert.match(await getRes.text(), /<form method="post"/);
+  assert.equal((await listEmailSubscribers(db)).length, 0, "GET must not confirm");
+
+  // Only the explicit POST does.
+  const postRes = await worker.fetch(new Request(confirmUrl, { method: "POST" }), env);
+  assert.equal(postRes.status, 200);
 
   const subs = await listEmailSubscribers(db);
   assert.equal(subs.length, 1);
   assert.equal(subs[0].email, "new@example.com");
+});
+
+test("a repeated subscribe request is throttled instead of mailing again", async (t) => {
+  const db = createMemoryD1();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response("{}", { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const env = {
+    DB: db,
+    EMAIL_UNSUBSCRIBE_SECRET: "s",
+    RESEND_API_KEY: "k",
+    RESEND_FROM_EMAIL: "a@b.com",
+  };
+  const send = () =>
+    worker.fetch(
+      new Request(`${SITE}/api/v1/subscribe/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "spam@example.com" }),
+      }),
+      env,
+    );
+
+  assert.equal((await send()).status, 202);
+  assert.equal((await send()).status, 202);
+  assert.equal(sent.length, 1, "the second request inside the cooldown must not send mail");
 });
 
 test("a tampered confirmation token is rejected", async () => {
