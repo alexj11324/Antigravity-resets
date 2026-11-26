@@ -95,7 +95,8 @@ export function renderAnnouncementsHtml(resets, lang) {
   const copy = copyFor(lang);
   return resets
     .map((item) => {
-      const text = originalPostText(item) || copy.viewOnX || "View on X";
+      const translated = item.textI18n?.[lang];
+      const text = translated || originalPostText(item) || copy.viewOnX || "View on X";
       const viewLabel = copy.viewOnX || "View on X";
       const href = safeHttpsUrl(item.url);
       return [
@@ -107,6 +108,9 @@ export function renderAnnouncementsHtml(resets, lang) {
         '<div class="bubble-meta">',
         `<span class="bubble-ago">${escapeHtml(formatRelative(item.timestamp, lang))}</span>`,
         `<span class="bubble-date">${escapeHtml(formatExact(item.timestamp, lang))}</span>`,
+        translated
+          ? `<span class="bubble-translated">${escapeHtml(copy.autoTranslated || "AI translation")}</span>`
+          : "",
         "</div>",
         `<p class="bubble-text" style="white-space: pre-wrap">${escapeHtml(text)}</p>`,
         '<div class="bubble-footer">',

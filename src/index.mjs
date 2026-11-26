@@ -12,6 +12,7 @@ import {
 import { handleMcpRequest } from "./mcp.mjs";
 import { buildOpenApi } from "./openapi.mjs";
 import { handleGuideRequest } from "./guide.mjs";
+import { translatePendingResets } from "./translate.mjs";
 
 const APEX_HOST = "antigravity-resets.com";
 const WWW_HOST = `www.${APEX_HOST}`;
@@ -31,6 +32,13 @@ const app = {
   async scheduled(_controller, env) {
     const result = await drainTelegramOutbox(env);
     if (result.error) throw new Error("Telegram outbox drain failed");
+    // Backfill translations a couple of rows at a time. A translation failure
+    // must never take the outbox drain down with it.
+    try {
+      await translatePendingResets(env, 2);
+    } catch (error) {
+      console.error("translation_backfill_failed", error);
+    }
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);

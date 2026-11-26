@@ -4,10 +4,22 @@ const PRESENCE_TTL_MS = 90 * 1000;
 const BASELINE_PRESENCE = 128;
 const seedQuotesByTweetId = new Map(SEED_RESETS.map(({ tweetId, quoteText }) => [tweetId, quoteText]));
 
+/**
+ * Original post text for a seeded announcement, by source tweet id. Existing
+ * deployments predate storing quote_text, so the translation backfill resolves
+ * the source from here instead of forcing a data migration.
+ * @param {string} tweetId
+ * @returns {string|null}
+ */
+export function seedQuoteFor(tweetId) {
+  return seedQuotesByTweetId.get(tweetId) || null;
+}
+
 function rowToReset(row) {
   let models = ["All Antigravity models"];
   let summary = { en: row.summary_en };
   let judgeSummary = null;
+  let textI18n = null;
   try {
     const parsedModels = JSON.parse(row.models_json || "[]");
     if (Array.isArray(parsedModels) && parsedModels.length > 0) {
@@ -23,6 +35,18 @@ function rowToReset(row) {
     }
   } catch {
     // keep default
+  }
+  try {
+    const parsedText = JSON.parse(row.text_i18n_json || "null");
+    if (parsedText && typeof parsedText === "object") {
+      const clean = {};
+      for (const [locale, value] of Object.entries(parsedText)) {
+        if (typeof value === "string" && value.trim()) clean[locale] = value;
+      }
+      textI18n = Object.keys(clean).length > 0 ? clean : null;
+    }
+  } catch {
+    textI18n = null;
   }
   if (row.judge_summary_json) {
     try {
@@ -42,6 +66,7 @@ function rowToReset(row) {
     models,
     url: row.url,
     quoteText: row.quote_text?.trim() ? row.quote_text : seedQuotesByTweetId.get(row.tweet_id) ?? null,
+    textI18n,
     summary,
     judgeSummary,
     thanksCount: Number(row.thanks_count || 0),
@@ -58,8 +83,8 @@ export async function ensureSeeded(db) {
 
   const stmt = db.prepare(
     `INSERT OR IGNORE INTO resets
-      (id, tweet_id, timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, tweet_id, timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, quote_text, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
   for (const item of SEED_RESETS) {
@@ -77,6 +102,7 @@ export async function ensureSeeded(db) {
         JSON.stringify(item.summary),
         null,
         item.thanksCount,
+        item.quoteText ?? null,
         item.source,
       )
       .run();

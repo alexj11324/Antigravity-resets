@@ -27,6 +27,12 @@ export function buildOpenApi() {
         additionalProperties: { type: "string" },
         description: "Localized one-line summary keyed by locale (en, zh-CN, zh-TW, ja, ko).",
       },
+      textI18n: {
+        type: ["object", "null"],
+        additionalProperties: { type: "string" },
+        description:
+          "Machine translation of the original post text keyed by locale (zh-CN, zh-TW, ja, ko). Null until the backfill has translated it; see /api-docs for the AI-translation label.",
+      },
     },
   };
 

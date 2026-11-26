@@ -190,6 +190,53 @@ async function verifyConfirmLink(url, env) {
   return { email, token };
 }
 
+/**
+ * Validate an unsubscribe token from either the query string or a JSON body.
+ * @param {string} email
+ * @param {string} token
+ * @param {object} env
+ * @returns {Promise<{email?: string, token?: string, status?: number, error?: string}>}
+ */
+async function verifyUnsubscribe(email, token, env) {
+  const secret = unsubscribeSecret(env);
+  if (!secret) {
+    return { status: 503, error: "Unsubscribe is not configured" };
+  }
+  const normalized = String(email || "").trim();
+  if (!normalized || !EMAIL_RE.test(normalized) || normalized.length > 254) {
+    return { status: 400, error: "Invalid email address" };
+  }
+  const expected = await unsubscribeToken(secret, normalized.toLowerCase());
+  if (!token || !timingSafeEqual(token, expected)) {
+    return { status: 403, error: "Invalid or missing unsubscribe token" };
+  }
+  return { email: normalized.toLowerCase(), token };
+}
+
+/**
+ * GET on the unsubscribe link only renders this form. Removing the address is
+ * a POST: mail clients and link scanners prefetch GET links, and a HEAD request
+ * is served by the GET path, so a state-changing GET would unsubscribe people
+ * who never clicked anything.
+ * @param {string} email
+ * @param {string} token
+ */
+function unsubscribeFormPage(email, token) {
+  const action = `/api/v1/unsubscribe?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Unsubscribe</title></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6"><h1 style="font-size:1.35rem">Antigravity Resets</h1><p>Stop reset alerts to <strong>${escapeXml(email)}</strong>?</p><form method="post" action="${action}"><button type="submit" style="font:inherit;font-weight:700;padding:10px 18px;border:2px solid #26201a;border-radius:10px;background:#ffd84d;cursor:pointer">Unsubscribe</button></form><p style="color:#5c5347">If you did not request this, close this page; nothing has changed.</p></body></html>`,
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex",
+        "Referrer-Policy": "no-referrer",
+      },
+    },
+  );
+}
+
 /** Which outbound transport this deployment has, if any. */
 export function emailTransport(env) {
   if (env?.EMAIL && typeof env.EMAIL.send === "function") return "cloudflare";
@@ -623,43 +670,49 @@ export async function handleApiRequest(request, env) {
     return json({ ok: true, ...result }, 201);
   }
 
-  // GET / POST /api/v1/unsubscribe — remove an email alert subscription.
-  // Requires the per-address HMAC token issued at subscribe time: without it a
-  // plain image tag or link could unsubscribe any address (CSRF), and the
-  // response must not disclose whether that address was subscribed at all.
-  if (
-    pathname === "/api/v1/unsubscribe" &&
-    (request.method === "POST" || request.method === "GET")
-  ) {
-    const secret = unsubscribeSecret(env);
-    if (!secret) {
-      return json({ error: "Unsubscribe is not configured" }, 503);
-    }
+  // GET /api/v1/unsubscribe — renders a confirmation form only. Removing the
+  // row here would let a mail scanner or link prefetcher unsubscribe someone
+  // who never clicked: it is a GET, and HEAD is served by this same path.
+  if (pathname === "/api/v1/unsubscribe" && request.method === "GET") {
+    const check = await verifyUnsubscribe(
+      url.searchParams.get("email"),
+      url.searchParams.get("token"),
+      env,
+    );
+    if (check.error) return htmlPage(check.status, check.error);
+    return unsubscribeFormPage(check.email, check.token);
+  }
 
-    let email = "";
-    let token = "";
-    if (request.method === "GET") {
-      email = (url.searchParams.get("email") || "").trim();
-      token = (url.searchParams.get("token") || "").trim();
-    } else {
+  // POST /api/v1/unsubscribe — the only place a subscription is removed.
+  // Requires the per-address HMAC token issued at subscribe time: without it a
+  // plain form post could unsubscribe any address, and the response must not
+  // disclose whether that address was subscribed at all.
+  if (pathname === "/api/v1/unsubscribe" && request.method === "POST") {
+    const wantsJson = String(request.headers.get("content-type") || "").includes(
+      "application/json",
+    );
+    let email = url.searchParams.get("email") || "";
+    let token = url.searchParams.get("token") || "";
+    if (wantsJson) {
       const parsed = await readJsonBody(request);
       if (parsed.error) return json({ error: parsed.error }, parsed.status);
-      email = typeof parsed.data.email === "string" ? parsed.data.email.trim() : "";
-      token = typeof parsed.data.token === "string" ? parsed.data.token.trim() : "";
-    }
-    if (!email || !EMAIL_RE.test(email) || email.length > 254) {
-      return json({ error: "Invalid email address" }, 400);
+      email = typeof parsed.data.email === "string" ? parsed.data.email : "";
+      token = typeof parsed.data.token === "string" ? parsed.data.token : "";
     }
 
-    const expected = await unsubscribeToken(secret, email.toLowerCase());
-    if (!token || !timingSafeEqual(token, expected)) {
-      return json({ error: "Invalid or missing unsubscribe token" }, 403);
+    const check = await verifyUnsubscribe(email, token, env);
+    if (check.error) {
+      return wantsJson
+        ? json({ error: check.error }, check.status)
+        : htmlPage(check.status, check.error);
     }
 
-    await removeEmailSubscription(env?.DB, email);
+    await removeEmailSubscription(env?.DB, check.email);
     // Generic response on purpose: revealing `removed` would let anyone probe
     // whether a given address is subscribed.
-    return json({ ok: true });
+    return wantsJson
+      ? json({ ok: true })
+      : htmlPage(200, "You have been unsubscribed. No further reset alerts will be sent.");
   }
 
   // POST /api/v1/admin/review/resolve — approve or dismiss a pending needs_review item
