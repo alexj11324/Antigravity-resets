@@ -56,6 +56,20 @@ the handler actually reads, after the same validation: invalid or ignored
 values must collapse onto the representation they would otherwise get. Test it
 by asserting the entry count stays 1 across different junk strings.
 
+## A transient failure must not trigger a fixed long retry
+
+The translation backfill retried a failed row after a flat hour. One transient
+model error left a single announcement untranslated for an hour while every
+other row was already done.
+
+**Rule:** retry transient work on a short exponential backoff (30s doubling,
+capped at an hour) driven by a per-row failure count, and reset the count on
+success. A fixed long delay treats "the model hiccuped once" the same as "this
+will never work". Filter rows by their own backoff rather than one SQL cutoff,
+so a stuck row cannot block the ones behind it. Order independent cron jobs so
+one failing subsystem cannot starve the others, and give operators an
+authenticated trigger to retry immediately instead of waiting for a tick.
+
 ## A GET that mutates state breaks under HEAD and prefetch
 
 `GET /api/v1/unsubscribe` removed the subscription. Mail scanners prefetch
