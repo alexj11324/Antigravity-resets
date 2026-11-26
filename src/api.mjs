@@ -33,6 +33,46 @@ function json(body, status = 200, extraHeaders = {}) {
   });
 }
 
+/**
+ * Validator over the stable part of a payload. `generatedAt` is dropped first:
+ * it changes on every request, so hashing it would make every ETag unique and
+ * revalidation could never hit.
+ * @param {object} payload
+ */
+async function payloadEtag(payload) {
+  const { generatedAt: _volatile, ...stable } = payload;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(stable)),
+  );
+  let hex = "";
+  for (const byte of new Uint8Array(digest).subarray(0, 16)) {
+    hex += byte.toString(16).padStart(2, "0");
+  }
+  return `"${hex}"`;
+}
+
+/**
+ * A cacheable JSON response that honours If-None-Match, so repeat polls cost a
+ * 304 instead of a body. Cache headers must still be sent on the 304, or the
+ * client loses the freshness window it was told about.
+ * @param {Request} request
+ * @param {object} payload
+ * @param {number} status
+ * @param {Record<string, string>} headers
+ */
+async function cachedJson(request, payload, status, headers) {
+  const etag = await payloadEtag(payload);
+  const common = { ...CORS_HEADERS, ...headers, ETag: etag };
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers: common });
+  }
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...common, "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
 function timingSafeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
   if (a.length !== b.length) return false;
@@ -327,7 +367,7 @@ export async function handleApiRequest(request, env) {
       headers: {
         ...CORS_HEADERS,
         "Content-Type": "application/rss+xml; charset=utf-8",
-        "Cache-Control": "public, max-age=60",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
       },
     });
   }
@@ -347,7 +387,7 @@ export async function handleApiRequest(request, env) {
       headers: {
         ...CORS_HEADERS,
         "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "public, max-age=60",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
       },
     });
   }
@@ -360,7 +400,8 @@ export async function handleApiRequest(request, env) {
       getActiveExpectedReset(env?.DB),
     ]);
     const stats = computeStats(resets);
-    return json(
+    return cachedJson(
+      request,
       {
         service: "antigravity-resets",
         watchedAccounts: [OFFICIAL_ACCOUNTS.leadHandle, OFFICIAL_ACCOUNTS.teamHandle],
@@ -379,7 +420,7 @@ export async function handleApiRequest(request, env) {
         generatedAt: new Date().toISOString(),
       },
       200,
-      { "Cache-Control": "public, max-age=15" },
+      { "Cache-Control": "public, max-age=15, s-maxage=15, stale-while-revalidate=60" },
     );
   }
 
@@ -396,7 +437,8 @@ export async function handleApiRequest(request, env) {
       limit,
     });
     const stats = computeStats(resets);
-    return json(
+    return cachedJson(
+      request,
       {
         count: resets.length,
         stats: {
@@ -407,7 +449,7 @@ export async function handleApiRequest(request, env) {
         resets,
       },
       200,
-      { "Cache-Control": "public, max-age=15" },
+      { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" },
     );
   }
 
