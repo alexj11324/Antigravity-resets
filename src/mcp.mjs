@@ -7,6 +7,53 @@
 import { loadSeoData, SITE_NAME, SITE_ORIGIN } from "./seo-data.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
+const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * Read and parse a JSON body without buffering more than `maxBytes`. The
+ * unbounded `request.json()` would let a caller stream arbitrary memory into
+ * the isolate before any validation runs.
+ * @param {Request} request
+ * @returns {Promise<{data?: unknown, error?: string, status?: number}>}
+ */
+async function readBoundedJson(request) {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    return { error: "Payload too large", status: 413 };
+  }
+  if (!request.body) return { data: {} };
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { error: "Payload too large", status: 413 };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  if (total === 0) return { data: {} };
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { data: JSON.parse(new TextDecoder().decode(buffer)) };
+  } catch {
+    return { error: "Parse error", status: 400 };
+  }
+}
 const SERVER_INFO = {
   name: "com.antigravity-resets/tracker",
   title: SITE_NAME,
@@ -139,11 +186,12 @@ async function dispatch(message, env) {
       const result = await callTool(name, args, env);
       return rpcResult(id, result);
     } catch (error) {
-      const code = error?.code || -32603;
-      return rpcResult(id, {
-        content: [{ type: "text", text: String(error?.message || "Tool failed") }],
-        isError: true,
-      }) && rpcError(id, code, String(error?.message || "Tool failed"));
+      console.error("mcp_tool_failed", name, error);
+      // Unknown-tool is a client mistake and safe to name; anything else could
+      // carry internal detail, so return a fixed message.
+      const message =
+        error?.code === -32602 ? `Unknown tool: ${name}` : "The tool failed to complete.";
+      return rpcError(id, error?.code || -32603, message);
     }
   }
 
@@ -177,21 +225,23 @@ export async function handleMcpRequest(request, env) {
     });
   }
 
-  let message;
-  try {
-    message = await request.json();
-  } catch {
-    return Response.json(rpcError(null, -32700, "Parse error"), {
-      status: 400,
+  const parsed = await readBoundedJson(request);
+  if (parsed.error) {
+    const status = parsed.status || 400;
+    const code = status === 413 ? -32600 : -32700;
+    return Response.json(rpcError(null, code, parsed.error), {
+      status,
       headers: { ...cors, "Content-Type": "application/json" },
     });
   }
+  const message = parsed.data;
 
   let payload;
   try {
     payload = await dispatch(message, env);
   } catch (error) {
-    payload = rpcError(message?.id, -32603, String(error?.message || "Internal error"));
+    console.error("mcp_dispatch_failed", error);
+    payload = rpcError(message?.id ?? null, -32603, "Internal error");
   }
 
   if (payload === null) {

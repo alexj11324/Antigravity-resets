@@ -465,17 +465,6 @@ export async function handleApiRequest(request, env) {
         return json({ ok: true, pendingConfirmation: false }, 200);
       }
 
-      // Throttle on when we actually sent, not on row creation: `created_at`
-      // never changes on conflict, so it can only ever fire once.
-      const cooldownMs = 10 * 60 * 1000;
-      const lastSent = existing?.confirmation_sent_at
-        ? new Date(existing.confirmation_sent_at).getTime()
-        : 0;
-      if (lastSent && Date.now() - lastSent < cooldownMs) {
-        // Recently mailed. Swallow repeats so one address cannot be flooded.
-        return json({ ok: true, pendingConfirmation: true }, 202);
-      }
-
       // Reserve an hourly send slot atomically before dispatching. Counting rows
       // missed repeat submits; counting sends and doing it as a conditional
       // increment means the cap holds under concurrency.
@@ -497,20 +486,30 @@ export async function handleApiRequest(request, env) {
 
     await addEmailSubscription(env?.DB, { email: normalized, locale, confirmed: 0 });
 
+    // Claim the per-address cooldown with a conditional UPDATE rather than a
+    // read-then-write: two concurrent requests could both pass the old check
+    // and both send. Only the request that wins the row dispatches mail.
+    if (env?.DB) {
+      const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const claim = await env.DB.prepare(
+        "UPDATE email_subscriptions SET confirmation_sent_at = ? " +
+          "WHERE email = ? AND (confirmation_sent_at IS NULL OR confirmation_sent_at < ?)",
+      )
+        .bind(new Date().toISOString(), normalized, cutoff)
+        .run();
+      if (Number(claim?.meta?.changes || 0) === 0) {
+        // Another request already sent inside the cooldown window.
+        return json({ ok: true, pendingConfirmation: true }, 202);
+      }
+    }
+
     const token = await confirmEmailToken(secret, normalized);
     try {
       await sendConfirmationEmail(env, normalized, token);
     } catch {
-      // The row stays pending; the visitor can submit again.
+      // The row stays pending; the visitor can submit again once the cooldown
+      // lapses. We keep the claim so a failing mailer cannot be hammered.
       return json({ error: "Could not send the confirmation email" }, 502);
-    }
-
-    if (env?.DB) {
-      await env.DB.prepare(
-        "UPDATE email_subscriptions SET confirmation_sent_at = ? WHERE email = ?",
-      )
-        .bind(new Date().toISOString(), normalized)
-        .run();
     }
 
     // 202: accepted, not active. The signed links live only in the mail, so this
