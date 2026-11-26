@@ -464,38 +464,26 @@ export async function handleApiRequest(request, env) {
         // Already active. Sending another confirmation would only be noise.
         return json({ ok: true, pendingConfirmation: false }, 200);
       }
-    }
 
-    // Create the pending row before the cooldown claim; the claim is a
-    // conditional UPDATE and would match nothing for a first-time address.
-    await addEmailSubscription(env?.DB, { email: normalized, locale, confirmed: 0 });
-
-    if (env?.DB) {
-      // Claim the per-address cooldown with a conditional UPDATE rather than a
-      // read-then-write: two concurrent requests could both pass the old check
-      // and both send. Only the request that wins the row dispatches mail.
-      //
-      // This runs BEFORE the global slot is reserved, and the order is load
-      // bearing: a request rejected here sends nothing, so it must not consume
-      // shared budget. With the reverse order, one address posted 100 times
-      // burns the hourly cap on 99 no-op responses and blocks every other
-      // subscriber -- an unauthenticated denial of service on the whole feature.
-      const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const claim = await env.DB.prepare(
-        "UPDATE email_subscriptions SET confirmation_sent_at = ? " +
-          "WHERE email = ? AND (confirmation_sent_at IS NULL OR confirmation_sent_at < ?)",
-      )
-        .bind(new Date().toISOString(), normalized, cutoff)
-        .run();
-      if (Number(claim?.meta?.changes || 0) === 0) {
-        // Another request already sent inside the cooldown window.
+      // Fast reject for a repeat submit, before any write. It keeps the common
+      // abuse path -- posting one address over and over -- at zero cost and
+      // zero rows. Advisory only: the conditional UPDATE below decides.
+      const cooldownCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      if (existing?.confirmation_sent_at && existing.confirmation_sent_at >= cooldownCutoff) {
         return json({ ok: true, pendingConfirmation: true }, 202);
       }
+    }
 
-      // Only a request that won the cooldown can dispatch, so only it spends a
-      // slot here. Conditional increment, not a row count: repeat submits used
-      // to slip past a count, and the increment stays correct under concurrency.
-      const windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
+    // Spend the shared hourly budget before creating any state. A request
+    // refused here mails nothing, so it must leave no trace: no pending row and
+    // no cooldown. Creating the row first let an exhausted hour keep growing
+    // email_subscriptions without bound, since only before-the-budget writes
+    // create rows and the reservation is what caps them.
+    let windowStart = "";
+    if (env?.DB) {
+      // Conditional increment, not a row count: repeat submits used to slip past
+      // a count, and the increment stays correct under concurrency.
+      windowStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString();
       await env.DB.prepare(
         "INSERT OR IGNORE INTO email_send_log (window_start, sent) VALUES (?, 0)",
       )
@@ -507,10 +495,33 @@ export async function handleApiRequest(request, env) {
         .bind(windowStart)
         .run();
       if (Number(reservation?.meta?.changes || 0) === 0) {
-        // Budget is gone for this hour. The address keeps its claim so an
-        // exhausted hour cannot be hammered either; it retries once the
-        // cooldown lapses.
         return json({ error: "Too many subscription attempts right now" }, 429);
+      }
+    }
+
+    // The row must exist before the claim below; a first-time address has none.
+    await addEmailSubscription(env?.DB, { email: normalized, locale, confirmed: 0 });
+
+    if (env?.DB) {
+      // The claim is the authority, not the advisory read above: two concurrent
+      // requests can both pass the read and both reach here. Only the request
+      // that wins the row dispatches mail.
+      const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const claim = await env.DB.prepare(
+        "UPDATE email_subscriptions SET confirmation_sent_at = ? " +
+          "WHERE email = ? AND (confirmation_sent_at IS NULL OR confirmation_sent_at < ?)",
+      )
+        .bind(new Date().toISOString(), normalized, cutoff)
+        .run();
+      if (Number(claim?.meta?.changes || 0) === 0) {
+        // Lost a race with a request for the same address. This one mails
+        // nothing, so it must not spend shared budget: refund the slot.
+        await env.DB.prepare(
+          "UPDATE email_send_log SET sent = sent - 1 WHERE window_start = ? AND sent > 0",
+        )
+          .bind(windowStart)
+          .run();
+        return json({ ok: true, pendingConfirmation: true }, 202);
       }
     }
 
