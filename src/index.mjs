@@ -30,15 +30,15 @@ function redirectStatus(request) {
 
 const app = {
   async scheduled(_controller, env) {
-    const result = await drainTelegramOutbox(env);
-    if (result.error) throw new Error("Telegram outbox drain failed");
-    // Backfill translations a couple of rows at a time. A translation failure
-    // must never take the outbox drain down with it.
+    // Translations first: they are independent of the outbox, and a broken
+    // outbox must not starve the backfill.
     try {
       await translatePendingResets(env, 2);
     } catch (error) {
       console.error("translation_backfill_failed", error);
     }
+    const result = await drainTelegramOutbox(env);
+    if (result.error) throw new Error("Telegram outbox drain failed");
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);

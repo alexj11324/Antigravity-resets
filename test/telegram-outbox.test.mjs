@@ -135,7 +135,9 @@ test('idempotent edit retries transport loss and treats not-modified as success;
 test('migration never enqueues notifications from the old writer during deploy or rollback', async () => {
   const db = database();
   await record(db, { resets: [reset()], watches: [watch()] });
-  db.sql.exec("INSERT INTO resets SELECT 'old', 'old', timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source, created_at, NULL, NULL, NULL FROM resets WHERE id = 'r1'");
+  // An old writer names only the columns it knew about; newer columns take
+  // their defaults. Positional SELECTs break every time a column is added.
+  db.sql.exec("INSERT INTO resets (id, tweet_id, timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source, created_at) SELECT 'old', 'old', timestamp, type, author_handle, author_name, models_json, url, summary_en, summary_i18n_json, judge_summary_json, thanks_count, source, created_at FROM resets WHERE id = 'r1'");
   db.sql.exec("INSERT INTO announced_resets (id, tweet_id, announced_at, type, author_handle, author_name, url, quote_text) VALUES ('old-watch', 'old-watch', '2026-11-26', 'regular', '@a', 'A', 'https://x.com/a/status/1', 'Old writer')");
   db.sql.exec("UPDATE announced_resets SET updates_json = '[]', url = 'https://x.com/a/status/2' WHERE id = 'w1'");
   assert.equal(rows(db).length, 2);

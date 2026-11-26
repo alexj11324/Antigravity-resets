@@ -13,6 +13,7 @@ import {
   removeEmailSubscription,
   resolveReviewEvent,
 } from "./store.mjs";
+import { translatePendingResets } from "./translate.mjs";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -81,6 +82,23 @@ function timingSafeEqual(a, b) {
     diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;
+}
+
+/**
+ * Bearer-token gate shared by every admin route. Returns a Response when the
+ * caller may not proceed, null when they may.
+ * @param {Request} request
+ * @param {object} env
+ * @returns {Response|null}
+ */
+function requireAdmin(request, env) {
+  const token = env?.ADMIN_API_TOKEN;
+  if (!token) return json({ error: "Admin API token is not configured" }, 503);
+  const authHeader = request.headers.get("Authorization") || "";
+  const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!timingSafeEqual(provided, token)) return json({ error: "Unauthorized" }, 401);
+  if (!env?.DB) return json({ error: "Durable storage is not configured" }, 503);
+  return null;
 }
 
 /**
@@ -803,18 +821,8 @@ async function handleApiRequestUncached(request, env) {
 
   // POST /api/v1/admin/review/resolve — approve or dismiss a pending needs_review item
   if (pathname === "/api/v1/admin/review/resolve" && request.method === "POST") {
-    const token = env?.ADMIN_API_TOKEN;
-    if (!token) {
-      return json({ error: "Admin API token is not configured" }, 503);
-    }
-    const authHeader = request.headers.get("Authorization") || "";
-    const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    if (!timingSafeEqual(provided, token)) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-    if (!env?.DB) {
-      return json({ error: "Durable storage is not configured" }, 503);
-    }
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
     const parsed = await readJsonBody(request);
     if (parsed.error) return json({ error: parsed.error }, parsed.status);
     const { eventHash, tweetId = null, action, type = "regular", summary = null, models = null } =
@@ -841,33 +849,16 @@ async function handleApiRequestUncached(request, env) {
 
   // GET /api/v1/admin/review — list webhook disagreements held for human review
   if (pathname === "/api/v1/admin/review" && request.method === "GET") {
-    const token = env?.ADMIN_API_TOKEN;
-    if (!token) {
-      return json({ error: "Admin API token is not configured" }, 503);
-    }
-    const authHeader = request.headers.get("Authorization") || "";
-    const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    if (!timingSafeEqual(provided, token)) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
     const items = await listReviewEvents(env?.DB, 25);
     return json({ count: items.length, items });
   }
 
   // POST /api/v1/admin/resets — authenticated manual announcement entry
   if (pathname === "/api/v1/admin/resets" && request.method === "POST") {
-    const token = env?.ADMIN_API_TOKEN;
-    if (!token) {
-      return json({ error: "Admin API token is not configured" }, 503);
-    }
-    const authHeader = request.headers.get("Authorization") || "";
-    const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    if (!timingSafeEqual(provided, token)) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-    if (!env?.DB) {
-      return json({ error: "Durable storage is not configured" }, 503);
-    }
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
     const parsed = await readJsonBody(request);
     if (parsed.error) return json({ error: parsed.error }, parsed.status);
     const {
@@ -898,6 +889,18 @@ async function handleApiRequestUncached(request, env) {
       summary,
     });
     return json({ ok: true, reset: record }, 201);
+  }
+
+  // POST /api/v1/admin/translate — run the translation backfill immediately
+  // instead of waiting for the next cron tick.
+  if (pathname === "/api/v1/admin/translate" && request.method === "POST") {
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
+    const parsed = await readJsonBody(request);
+    if (parsed.error) return json({ error: parsed.error }, parsed.status);
+    const limit = Number.isInteger(parsed.data?.limit) ? parsed.data.limit : 10;
+    const result = await translatePendingResets(env, limit);
+    return json({ ok: true, ...result });
   }
 
   return json({ error: "Not found" }, 404);
