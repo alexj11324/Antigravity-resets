@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Public API Docs &mdash; Antigravity Reset Tracker</title>
+    <meta
+      name="description"
+      content="Free keyless JSON API for Google Antigravity quota resets: live status, full reset history, an embeddable SVG badge, and an RSS feed. No authentication required."
+    />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="https://antigravity-resets.com/api-docs" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Antigravity Resets" />
+    <meta property="og:title" content="Public API Docs &mdash; Antigravity Reset Tracker" />
+    <meta
+      property="og:description"
+      content="Free keyless JSON API for Google Antigravity quota resets: live status, full reset history, an embeddable SVG badge, and an RSS feed."
+    />
+    <meta property="og:url" content="https://antigravity-resets.com/api-docs" />
+    <meta property="og:image" content="https://antigravity-resets.com/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Public API Docs &mdash; Antigravity Reset Tracker" />
+    <meta
+      name="twitter:description"
+      content="Free keyless JSON API for Google Antigravity quota resets: live status, full reset history, an embeddable SVG badge, and an RSS feed."
+    />
+    <meta name="twitter:image" content="https://antigravity-resets.com/og-image.jpg" />
+    <link rel="icon" type="image/png" sizes="256x256" href="/favicon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="top-header">
+        <div class="brand-group">
+          <div class="avatar-ring">
+            <img src="/assets/varun-avatar.webp" alt="Varun Mohan" width="48" height="48" />
+          </div>
+          <h1 class="brand-title">
+            <a class="brand-link" href="/">Antigravity Resets API</a>
+          </h1>
+        </div>
+        <div class="header-actions">
+          <a class="pill-btn yellow-btn" href="/">← Back to tracker</a>
+        </div>
+      </header>
+
+      <p class="subtitle">
+        Free keyless JSON, RSS, and SVG badge endpoints for scripts, menu bars, and AI agents checking official Google Antigravity quota resets.
+      </p>
+
+      <main>
+        <section class="docs-card">
+          <div>
+            <span class="docs-method">GET</span>
+            <span class="docs-path">/api/v1/status</span>
+          </div>
+          <p class="section-sub">
+            Returns the latest regular or banked reset, interval statistics, thanks count, and live presence count.
+          </p>
+          <pre class="code-box"><code>curl -s https://antigravity-resets.com/api/v1/status | jq</code></pre>
+        </section>
+
+        <section class="docs-card">
+          <div>
+            <span class="docs-method">GET</span>
+            <span class="docs-path">/api/v1/resets</span>
+          </div>
+          <p class="section-sub">
+            Returns the chronological reset archive. Optional query parameters: <code>type=regular|banked</code> and <code>limit=1..200</code>.
+          </p>
+          <pre class="code-box"><code>curl -s "https://antigravity-resets.com/api/v1/resets?type=regular&amp;limit=5" | jq</code></pre>
+        </section>
+
+        <section class="docs-card">
+          <div>
+            <span class="docs-method">GET</span>
+            <span class="docs-path">/feed.xml</span>
+            <span class="docs-path">/api/v1/badge.svg</span>
+          </div>
+          <p class="section-sub">
+            Subscribe in any RSS reader via <code>/feed.xml</code>, or embed a live status badge in your README using <code>/api/v1/badge.svg</code>.
+          </p>
+          <pre class="code-box"><code>![Antigravity Reset](https://antigravity-resets.com/api/v1/badge.svg)</code></pre>
+        </section>
+
+        <section class="docs-card">
+          <div>
+            <span class="docs-method">GET / POST</span>
+            <span class="docs-path">/api/webhooks/x</span>
+          </div>
+          <p class="section-sub">
+            Verified X Activity (<code>post.create</code>) and legacy webhook receiver with HMAC-SHA256 CRC validation and raw-byte verification. Replied-to parent posts and quoted posts are resolved separately from <code>data.includes</code> (and missing parents can be auto-hydrated via X API v2 when <code>X_BEARER_TOKEN</code> is configured). Candidate posts are jointly judged in parallel by Google Gemini Decisions API (<code>gemini-decision-1</code>) and Google Gemini 3.8 Flash (<code>gemini-3.8-flash</code>). Both Tier-1 judges must concur on reset status and type (<code>regular</code> vs <code>banked</code>) to auto-publish; disagreements escalate to a Tier-2 frontier arbitrator (<code>gemini-4-neon</code>), and any remaining uncertain or missing-context events enter <code>/api/v1/admin/review</code> with optional private admin Telegram alerts (never public broadcast).
+          </p>
+          <pre class="code-box"><code># CRC challenge check
+GET /api/webhooks/x?crc_token=&lt;token&gt;
+
+# Event delivery headers
+X-Twitter-Webhooks-Signature-OAuth2: sha256=&lt;base64-hmac&gt;</code></pre>
+        </section>
+
+        <section class="docs-card">
+          <div>
+            <span class="docs-method">GET / POST</span>
+            <span class="docs-path">/api/v1/admin/review</span>
+            <span class="docs-path">/api/v1/admin/review/resolve</span>
+          </div>
+          <p class="section-sub">
+            Bearer-authenticated operator queue for inspecting and approving or dismissing held <code>needs_review</code> webhook events.
+          </p>
+          <pre class="code-box"><code>curl -s -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  https://antigravity-resets.com/api/v1/admin/review | jq</code></pre>
+        </section>
+      </main>
+    </div>
+    <script>
+      const saved = localStorage.getItem("ag_theme");
+      if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    </script>
+  </body>
+</html>
