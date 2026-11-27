@@ -28,6 +28,47 @@ function redirectStatus(request) {
   return request.method === "GET" || request.method === "HEAD" ? 301 : 308;
 }
 
+/**
+ * A real 404 page instead of the asset layer's zero-byte response. The status
+ * stays 404 and the page is noindex: a lost visitor gets navigation, a crawler
+ * gets an unambiguous miss.
+ * @returns {Response}
+ */
+function notFoundResponse() {
+  const html = `<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page not found &mdash; Antigravity Resets</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <main>
+        <h1 class="docs-heading">Page not found</h1>
+        <p class="section-sub">That URL does not exist on this tracker. These pages do:</p>
+        <p>
+          <a class="text-link" href="/">Live reset status</a> &middot;
+          <a class="text-link" href="/guide">How quota works</a> &middot;
+          <a class="text-link" href="/api-docs">API reference</a>
+        </p>
+      </main>
+    </div>
+  </body>
+</html>`;
+  return new Response(html, {
+    status: 404,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Robots-Tag": "noindex",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 const app = {
   async scheduled(_controller, env) {
     // Translations first: they are independent of the outbox, and a broken
@@ -181,10 +222,11 @@ const app = {
     }
 
     if (env?.ASSETS) {
-      return env.ASSETS.fetch(request);
+      const asset = await env.ASSETS.fetch(request);
+      return asset.status === 404 ? notFoundResponse() : asset;
     }
 
-    return new Response("Not found", { status: 404 });
+    return notFoundResponse();
   },
 };
 

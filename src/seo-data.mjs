@@ -159,52 +159,54 @@ export function pageMeta(lang) {
       title: "Antigravity Reset Tracker — Did Antigravity Reset Today? Live Status & History",
       description:
         "Did Antigravity reset today? Live Google Antigravity quota reset tracker watching @_mohansolo and @antigravity for official resets, plus full history, alerts, and a free JSON API.",
-      answerPrefix: "Yes.",
       noResetYet: "No official Antigravity reset has been announced yet.",
-      answerSuffix:
-        "official resets are tracked from posts by Varun Mohan (@_mohansolo) and the Antigravity team; verify your live meter inside the IDE or CLI.",
-      answerLead: (author, when, exact) =>
-        author + " announced an official reset " + when + " (" + exact + ").",
+      // The answer must be true for the whole UTC day it is served on: a reset
+      // at 07:19 UTC is "today" until midnight UTC, then "yesterday" even
+      // though "17 hours ago" is still accurate.
+      liveAnswer: ({ sameDay, author, when, exact, total, since, asOf }) =>
+        sameDay
+          ? `Yes. Antigravity reset today (UTC): ${author} announced an official reset at ${exact} (${when}). ${total} resets tracked since ${since}. Status as of ${asOf}.`
+          : `No reset today (UTC) yet. The last official Antigravity reset was ${exact} (${when}), announced by ${author}. ${total} resets tracked since ${since}. Status as of ${asOf}.`,
     },
     "zh-CN": {
       title: "Antigravity 重置追踪 — 今天 Antigravity 重置了吗？实时状态与历史",
       description:
         "今天 Antigravity 重置了吗？实时追踪 @_mohansolo 与 @antigravity 发布的 Google Antigravity 官方配额重置公告，提供完整历史、提醒与免费 JSON API。",
-      answerPrefix: "是的。",
       noResetYet: "目前还没有官方 Antigravity 重置公告。",
-      answerSuffix: "官方重置以 Varun Mohan (@_mohansolo) 与 Antigravity 团队在 X 上的公告为准；你的实时额度请在 IDE 或 CLI 中查看。",
-      answerLead: (author, when, exact) =>
-        author + " 在 " + when + "发布了官方重置公告（" + exact + "）。",
+      liveAnswer: ({ sameDay, author, when, exact, total, since, asOf }) =>
+        sameDay
+          ? `是的。今天（UTC）Antigravity 已重置：${author} 于 ${exact}（${when}）发布了官方重置公告。自 ${since} 起共记录 ${total} 次重置。数据截至 ${asOf}。`
+          : `今天（UTC）尚未重置。最近一次官方重置是 ${exact}（${when}），由 ${author} 公布。自 ${since} 起共记录 ${total} 次重置。数据截至 ${asOf}。`,
     },
     "zh-TW": {
       title: "Antigravity 重置追蹤 — 今天 Antigravity 重置了嗎？即時狀態與歷史",
       description:
         "今天 Antigravity 重置了嗎？即時追蹤 @_mohansolo 與 @antigravity 發布的 Google Antigravity 官方配額重置公告，提供完整歷史、提醒與免費 JSON API。",
-      answerPrefix: "是的。",
       noResetYet: "目前還沒有官方 Antigravity 重置公告。",
-      answerSuffix: "官方重置以 Varun Mohan (@_mohansolo) 與 Antigravity 團隊在 X 上的公告為準；你的即時額度請在 IDE 或 CLI 中查看。",
-      answerLead: (author, when, exact) =>
-        author + " 在 " + when + "發布了官方重置公告（" + exact + "）。",
+      liveAnswer: ({ sameDay, author, when, exact, total, since, asOf }) =>
+        sameDay
+          ? `是的。今天（UTC）Antigravity 已重置：${author} 於 ${exact}（${when}）發布了官方重置公告。自 ${since} 起共記錄 ${total} 次重置。資料截至 ${asOf}。`
+          : `今天（UTC）尚未重置。最近一次官方重置是 ${exact}（${when}），由 ${author} 公布。自 ${since} 起共記錄 ${total} 次重置。資料截至 ${asOf}。`,
     },
     ja: {
       title: "Antigravity リセット追跡 — 今日 Antigravity はリセットされた？ライブ状況と履歴",
       description:
         "今日 Antigravity はリセットされた？@_mohansolo と @antigravity が発表する Google Antigravity の公式クォータリセットをリアルタイムで追跡。履歴、通知、無料 JSON API を提供します。",
-      answerPrefix: "はい。",
       noResetYet: "公式の Antigravity リセットはまだ発表されていません。",
-      answerSuffix: "公式リセットは Varun Mohan (@_mohansolo) と Antigravity チームの X 投稿に基づきます。残量は IDE または CLI で確認してください。",
-      answerLead: (author, when, exact) =>
-        author + " が " + when + "に公式リセットを発表しました（" + exact + "）。",
+      liveAnswer: ({ sameDay, author, when, exact, total, since, asOf }) =>
+        sameDay
+          ? `はい。本日（UTC）Antigravity はリセットされました。${author} が ${exact}（${when}）に公式リセットを発表しました。${since} 以降 ${total} 件を記録しています。データ基準時刻: ${asOf}。`
+          : `本日（UTC）はまだリセットされていません。最後の公式リセットは ${exact}（${when}）、${author} による発表です。${since} 以降 ${total} 件を記録しています。データ基準時刻: ${asOf}。`,
     },
     ko: {
       title: "Antigravity 리셋 추적 — 오늘 Antigravity 가 리셋되었나요? 실시간 상태와 기록",
       description:
         "오늘 Antigravity 가 리셋되었나요? @_mohansolo 와 @antigravity 가 발표하는 Google Antigravity 공식 할당량 리셋을 실시간으로 추적합니다. 전체 기록, 알림, 무료 JSON API 제공.",
-      answerPrefix: "네.",
       noResetYet: "아직 공식 Antigravity 리셋 발표가 없습니다.",
-      answerSuffix: "공식 리셋은 Varun Mohan(@_mohansolo) 과 Antigravity 팀의 X 게시물을 기준으로 합니다. 남은 할당량은 IDE 또는 CLI 에서 확인하세요.",
-      answerLead: (author, when, exact) =>
-        author + " 님이 " + when + "에 공식 리셋을 발표했습니다 (" + exact + ").",
+      liveAnswer: ({ sameDay, author, when, exact, total, since, asOf }) =>
+        sameDay
+          ? `네. 오늘(UTC) Antigravity 가 리셋되었습니다. ${author} 님이 ${exact}(${when})에 공식 리셋을 발표했습니다. ${since} 이후 총 ${total}건을 기록했습니다. 데이터 기준 시각: ${asOf}.`
+          : `오늘(UTC)은 아직 리셋되지 않았습니다. 마지막 공식 리셋은 ${exact}(${when})에 ${author} 님이 발표했습니다. ${since} 이후 총 ${total}건을 기록했습니다. 데이터 기준 시각: ${asOf}.`,
     },
   };
   return meta[lang] || meta.en;

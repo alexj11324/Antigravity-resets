@@ -268,6 +268,12 @@ function buildHeatmapWeeks(resets) {
 function applyTheme() {
   document.documentElement.setAttribute("data-theme", state.theme);
   localStorage.setItem("ag_theme", state.theme);
+  // Mobile browsers paint the address bar with this; a dark page under a pale
+  // bar looks broken.
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) {
+    themeMeta.setAttribute("content", state.theme === "dark" ? "#151311" : "#fff4dd");
+  }
   if (state.theme === "dark") {
     els.themeIcon.innerHTML =
       '<circle cx="12" cy="12" r="4.5"></circle><path d="M12 2v2.2M12 19.8V22M4.93 4.93l1.55 1.55M17.52 17.52l1.55 1.55M2 12h2.2M19.8 12H22M4.93 19.07l1.55-1.55M17.52 6.48l1.55-1.55"></path>';
@@ -495,8 +501,9 @@ function renderAnnouncements() {
     ago.className = "bubble-ago";
     ago.textContent = formatRelative(item.timestamp);
 
-    const exact = document.createElement("span");
+    const exact = document.createElement("time");
     exact.className = "bubble-date";
+    exact.dateTime = item.timestamp;
     exact.textContent = formatTimestamp(item.timestamp);
 
     meta.append(ago, exact);
@@ -850,6 +857,7 @@ function render() {
       latest.type === "banked" ? c.typeBankedTip : c.typeRegularTip;
     els.latestRelative.textContent = formatRelative(latest.timestamp);
     els.latestExact.textContent = formatTimestamp(latest.timestamp);
+    els.latestExact.setAttribute("datetime", latest.timestamp);
   } else {
     els.resetTypeBtn.textContent = c.typeRegular;
     els.resetTypeTip.textContent = c.typeRegularTip;

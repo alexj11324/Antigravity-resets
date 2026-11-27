@@ -108,7 +108,7 @@ export function renderAnnouncementsHtml(resets, lang) {
         '<div class="bubble-card">',
         '<div class="bubble-meta">',
         `<span class="bubble-ago">${escapeHtml(formatRelative(item.timestamp, lang))}</span>`,
-        `<span class="bubble-date">${escapeHtml(formatExact(item.timestamp, lang))}</span>`,
+        `<time class="bubble-date" datetime="${escapeHtml(String(item.timestamp))}">${escapeHtml(formatExact(item.timestamp, lang))}</time>`,
         translated
           ? `<span class="bubble-translated">${escapeHtml(copy.autoTranslated || "AI translation")}</span>`
           : "",
@@ -296,9 +296,17 @@ export async function handleHtmlRequest(request, env, lang) {
         el.setInnerContent(latest ? formatRelative(latest.timestamp, lang) : "—");
       },
     })
+    .on("#liveAnswer", {
+      element(el) {
+        // The same sentence feeds the FAQ, the JSON-LD and the Markdown mirror;
+        // rendering it in the hero is what makes it quotable from the page.
+        el.setInnerContent(buildLiveAnswer(data, lang));
+      },
+    })
     .on("#latestExact", {
       element(el) {
         el.setInnerContent(latest ? formatExact(latest.timestamp, lang) : "");
+        if (latest) el.setAttribute("datetime", String(latest.timestamp));
       },
     })
     .on("#thanksCount", {
