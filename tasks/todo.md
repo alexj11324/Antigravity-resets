@@ -87,3 +87,17 @@
    后置 1；`listEmailSubscribers` 只返回 `confirmed = 1`；未确认的重复提交无法降级或改写已确认
    记录的语言。`0003_confirm_existing_subscriptions.sql` 把历史订阅标记为已确认（表单一提交
    即视为 opt-in）。没有配置 Resend 时，因为根本发不出信，订阅直接存为已确认。
+
+## SEO / GEO / Agentic 第二轮（2026-11-26）
+
+- [x] 字体自托管（3 个 variable woff2）+ preload，去掉 Google Fonts 阻塞请求
+- [x] JetBrains Mono 使用 font-display: optional，消除 banner 字体交换位移
+- [x] 每个 guide 页生成自己的 `.md` 镜像，`rel=alternate` 指向自身
+- [x] `/api-docs` 重写为完整参考：TOC、参数/字段表、响应示例、错误与限流
+- [x] `/api-docs` 补 TechArticle + BreadcrumbList
+- [x] `/api/v1/resets` 统计不再被 `limit` 缩小
+- [x] 对比度、24px 触控目标、heatmap 去按钮化、aria-label 对齐、邮箱 label
+- [x] RFC 9727 `/.well-known/api-catalog` + `service-desc` Link 头
+- [x] 首页 footer 增加 guide 链接（按语言指向对应版本）
+- [x] `llms.txt` 增加 guide Markdown 链接
+- [x] 测试 137/137；线上 Lighthouse Accessibility 90 → 100
