@@ -91,17 +91,6 @@ const COPY = {
   },
 };
 
-/**
- * @param {string} pathname
- * @returns {string|null} locale for a history path, or null
- */
-export function historyLang(pathname) {
-  for (const [code, path] of Object.entries(HISTORY_PATH)) {
-    if (path === pathname) return code;
-  }
-  return null;
-}
-
 function alternates() {
   return [
     ...Object.entries(HISTORY_PATH).map(
@@ -109,6 +98,17 @@ function alternates() {
     ),
     `<link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/history" />`,
   ].join("");
+}
+
+/**
+ * A raw `|` or newline in an X display name would break the Markdown table.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function escapeMarkdownCell(value) {
+  return String(value ?? "")
+    .replace(/\|/g, "\\|")
+    .replace(/\s*\n\s*/g, " ");
 }
 
 function renderRows(resets, copy, lang) {
@@ -203,6 +203,7 @@ export async function handleHistoryRequest(env, lang) {
     <meta name="description" content="${escapeHtml(copy.description)}" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="${canonical}" />
+    <link rel="alternate" type="text/markdown" title="Markdown" href="${SITE_ORIGIN}${HISTORY_PATH[code]}.md" />
     ${alternates()}
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="${escapeHtml(SITE_NAME)}" />
@@ -289,7 +290,7 @@ export async function handleHistoryMarkdownRequest(env, lang) {
     ...data.resets.map((item) => {
       const href = safeHttpsUrl(item.url);
       const models = Array.isArray(item.models) && item.models.length > 0 ? item.models.join(", ") : "—";
-      return `| ${formatExact(item.timestamp, lang)} | ${copy.types[item.type] || copy.types.regular} | ${item.authorName} (${item.authorHandle}) | ${models} | ${href ? `[${copy.source}](${href})` : "—"} |`;
+      return `| ${formatExact(item.timestamp, lang)} | ${escapeMarkdownCell(copy.types[item.type] || copy.types.regular)} | ${escapeMarkdownCell(`${item.authorName} (${item.authorHandle})`)} | ${escapeMarkdownCell(models)} | ${href ? `[${copy.source}](${href})` : "—"} |`;
     }),
     "",
     `[${copy.back}](${langUrl(code)})`,

@@ -49,7 +49,10 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
       .bind(STATE_KEY)
       .first();
     if (state?.value === ts) return { status: "unchanged" };
-  } catch {
+  } catch (error) {
+    // Silence here would disable IndexNow forever if 0007 never ran, with no
+    // signal anywhere. One log line makes that misconfiguration findable.
+    console.error("indexnow_state_unavailable", error?.message || "unknown");
     return { status: "skipped", detail: "site_state unavailable" };
   }
 
@@ -59,6 +62,9 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     response = await fetchImpl(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
+      // The cron also drains user-facing alerts; a hung endpoint must not
+      // hold that up for the whole invocation budget.
+      signal: AbortSignal.timeout(5000),
       body: JSON.stringify({
         host: new URL(SITE_ORIGIN).host,
         key,

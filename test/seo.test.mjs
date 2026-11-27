@@ -233,17 +233,26 @@ test("robots.txt states the same content policy for every group", async () => {
 });
 
 test("the history page is server-rendered with machine-readable dates", async () => {
-  for (const [path, mdPath, homePath] of [
-    ["/history", "/history.md", "/"],
-    ["/zh-CN/history", "/zh-CN/history.md", "/zh-CN"],
-    ["/ja/history", "/ja/history.md", "/ja"],
+  for (const [path, mdPath, homePath, lang] of [
+    ["/history", "/history.md", "/", "en"],
+    ["/zh-CN/history", "/zh-CN/history.md", "/zh-CN", "zh-CN"],
+    ["/ja/history", "/ja/history.md", "/ja", "ja"],
   ]) {
     const res = await worker.fetch(new Request(`${SITE}${path}`), env, ctx);
     assert.equal(res.status, 200, path);
+    assert.equal(res.headers.get("content-language"), lang, `${path} must declare its locale`);
     const html = await res.text();
     assert.ok((html.match(/<time datetime="/g) || []).length >= 15, `${path} needs dated rows`);
     assert.match(html, /type="application\/ld\+json"/);
-    assert.ok(html.includes(`${SITE}${path}`), "canonical must be self-referencing");
+    assert.ok(html.includes(`<html lang="${lang}"`), `${path} must render in its own language`);
+    assert.ok(
+      html.includes(`<link rel="canonical" href="${SITE}${path}" />`),
+      `${path} canonical must be self-referencing`,
+    );
+    assert.ok(
+      html.includes(`<link rel="alternate" type="text/markdown" title="Markdown" href="${SITE}${mdPath}" />`),
+      `${path} must advertise its own Markdown mirror`,
+    );
 
     const md = await worker.fetch(new Request(`${SITE}${mdPath}`), env, ctx);
     assert.equal(md.status, 200, mdPath);
@@ -258,9 +267,24 @@ test("the sitemap lists history pages with hreflang", async () => {
   const body = await (
     await worker.fetch(new Request(`${SITE}/sitemap.xml`), env, ctx)
   ).text();
-  for (const path of ["/history", "/zh-CN/history", "/ja/history"]) {
-    assert.ok(body.includes(`${SITE}${path}</loc>`), path);
+  const blocks = (body.match(/<url>[\s\S]*?<\/url>/g) || []).filter((block) =>
+    /<loc>[^<]*\/history<\/loc>/.test(block),
+  );
+  assert.equal(blocks.length, 5, "every history locale needs its own entry");
+  // Checking presence in the whole document would pass even if the block
+  // itself carried the wrong alternate set, so assert inside each block.
+  for (const block of blocks) {
+    for (const code of ["en", "zh-CN", "zh-TW", "ja", "ko", "x-default"]) {
+      assert.ok(block.includes(`hreflang="${code}"`), `history entry needs ${code}`);
+    }
   }
+});
+
+test("Markdown table cells cannot be broken by a pipe in user content", async () => {
+  const { escapeMarkdownCell } = await import("../src/history.mjs");
+  assert.equal(escapeMarkdownCell("A | B"), "A \\| B");
+  assert.equal(escapeMarkdownCell("line\nbreak"), "line break");
+  assert.equal(escapeMarkdownCell(null), "");
 });
 
 test("unknown URLs return a real HTML 404 that is not indexable", async () => {
