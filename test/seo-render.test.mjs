@@ -171,6 +171,7 @@ test("the organization entity never claims the tracked account", () => {
     !org.sameAs.some((url) => url.includes("_mohansolo")),
     "sameAs asserts identity; the tracked account is not this site",
   );
+  assert.ok(org.sameAs.includes("https://x.com/agy_resets"), "our own X account");
   assert.ok(org.sameAs.includes("https://t.me/antigravity_resets_alert"));
 });
 
