@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.mjs";
-import { pingIndexNow, redactApiKey } from "../src/indexnow.mjs";
+import { pingIndexNow, redactApiKey, redactSecret } from "../src/indexnow.mjs";
 import { createMemoryD1 } from "./sqlite-d1.mjs";
 import { ensureSeeded } from "../src/store.mjs";
 
@@ -143,6 +143,11 @@ test("an API key cannot leak into a logged rejection body", () => {
     "boom: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=<redacted>&x=1",
   );
   assert.equal(redactApiKey(null), "");
+  // A body that echoes the raw key without the parameter name must still be
+  // scrubbed, in its raw and URL-encoded forms.
+  assert.equal(redactSecret("key secret123 rejected", "secret123"), "key <redacted> rejected");
+  assert.equal(redactSecret("key secret%20123 rejected", "secret 123"), "key <redacted> rejected");
+  assert.equal(redactSecret("nothing to hide", ""), "nothing to hide");
 });
 
 test("without a key or database the ping is a no-op", async () => {

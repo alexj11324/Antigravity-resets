@@ -23,8 +23,25 @@ const ATTEMPT_KEY = "indexnow_last_attempt";
 const RETRY_AFTER_MS = 60 * 60 * 1000;
 
 /**
- * Bing Webmaster takes its key as a query parameter, so any string that may be
- * logged — an error message or a response body — must be scrubbed first.
+ * Primary control: redact the secret by value, including its URL-encoded form.
+ * A body that echoes the key without naming the `apikey` parameter would slip
+ * past a pattern-only rule.
+ * @param {unknown} value
+ * @param {string} [secret]
+ * @returns {string}
+ */
+export function redactSecret(value, secret) {
+  let out = String(value ?? "");
+  if (!secret) return out;
+  for (const form of new Set([secret, encodeURIComponent(secret)])) {
+    out = out.split(form).join("<redacted>");
+  }
+  return out;
+}
+
+/**
+ * Secondary, pattern-based defense in depth for anything that still names the
+ * parameter.
  * @param {unknown} value
  * @returns {string}
  */
@@ -162,7 +179,9 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     // slice so a persistent rejection is diagnosable from the cron logs.
     let body = "";
     try {
-      body = redactApiKey((await response.text()).slice(0, 200));
+      body = redactApiKey(
+        redactSecret((await response.text()).slice(0, 200), bingKey),
+      );
     } catch {
       body = "";
     }
