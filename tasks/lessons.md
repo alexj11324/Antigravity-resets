@@ -109,3 +109,42 @@ of that exact URL, and the target must return 200. When a template has no real
 mirror, omit the link instead of borrowing the homepage's. Test it by fetching
 each indexable URL, reading its alternate href, and asserting the target is 200
 with the right content type.
+
+## A relative-time answer needs an absolute day boundary
+
+The homepage FAQ answered "Did Antigravity reset today?" with "Yes. … announced
+an official reset 17 hours ago". Seventeen hours before 00:30 UTC is the
+previous UTC day, so for the first hours of every day the answer was wrong —
+and the same string was copied into the FAQ JSON-LD and the Markdown mirror.
+
+**Rule:** any answer that contains the word "today" must compute the calendar
+day explicitly, in a named timezone, and state an `as of` timestamp. Put the
+absolute time before the relative one ("Nov 26, 2026, 07:19 UTC (17 hours
+ago)"), because the relative phrase alone is not checkable. Test both branches
+by offsetting the timestamp from the current UTC day — a test that only checks
+the happy branch will pass forever.
+
+## `sameAs` asserts identity, not attribution
+
+The Organization node listed `https://x.com/_mohansolo` in `sameAs`. The site
+tracks that account; it is not that account. `sameAs` means "this URL
+unambiguously identifies the same entity", so the markup told search and AI
+engines the tracker *was* the Google employee it monitors, contradicting the
+footer's independence statement.
+
+**Rule:** only list profiles the site itself operates. The tracked person
+belongs in the description, the FAQ prose, and each announcement's author —
+never in `sameAs`. Compare with a peer's markup before assuming a pattern is
+industry practice: codex-resets.com lists its own accounts only.
+
+## Run the plugin's own capability check before declaring a service absent
+
+I checked `env | grep GOOGLE_`, saw no Search Console key, and told the user
+there were no Google credentials. The plugin stores them at
+`~/.config/claude-seo/google-api.json` and exposes `google_auth.py --check` for
+exactly this. The check would have shown a working GSC service account; the
+real blocker was a property-level permission, not a missing credential.
+
+**Rule:** when a tool ships a `--check` for a capability, run that, not an
+improvised probe. Report "the account cannot see this property" separately from
+"no credentials exist" — they lead to different fixes.
