@@ -1,5 +1,7 @@
 # Antigravity-resets
 
+[![LINUX DO Community](https://img.shields.io/badge/LINUX%20DO-Community-F0A020)](https://linux.do/)
+
 [Antigravity Resets](https://antigravity-resets.com/) — live Google Antigravity quota reset tracker.
 
 ```html
