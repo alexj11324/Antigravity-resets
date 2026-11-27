@@ -80,3 +80,32 @@ unsubscribe a reader who never clicked. Same class as the earlier confirm link.
 confirmation form; the form posts. When adding a global HEAD → GET shim, audit
 every GET route for writes first — the shim makes an existing bad GET easier to
 trigger, it does not create the bug.
+
+## Third-party fonts are a performance and layout-shift decision
+
+The page loaded three families from `fonts.googleapis.com`. PSI mobile measured
+a render-blocking chain (~710 ms) and CLS 0.35; the local Lighthouse trace named
+`section.banner-stack` and the cause was literally "Web font loaded" (JetBrains
+Mono swapping in after first paint).
+
+**Rule:** self-host the fonts you actually use, preload the ones needed above
+the fold, and keep `font-display: optional` for any face whose fallback metrics
+differ enough to move layout. Google's CSS URL is convenient but puts a third
+party in the critical path and hides which file is late. Three variable woff2
+files replaced a 12 KB CSS request plus seven font fetches.
+
+**How to verify:** `lighthouse_agentic.py` / PSI for CLS, and a `layout-shift`
+PerformanceObserver in a cold isolated browser context. A warm cache hides the
+problem completely — unregister the service worker and clear caches first.
+
+## An alternate representation that points at another page is a lie
+
+Every guide page advertised `/index.md` as its Markdown alternate, and
+`/guide.md` returned 404. The header looked correct in isolation, which is why
+it survived earlier audits.
+
+**Rule:** every `rel="alternate"` must resolve to an equivalent representation
+of that exact URL, and the target must return 200. When a template has no real
+mirror, omit the link instead of borrowing the homepage's. Test it by fetching
+each indexable URL, reading its alternate href, and asserting the target is 200
+with the right content type.
