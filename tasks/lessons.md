@@ -180,3 +180,19 @@ same shape: it searched the whole document for each URL.
 `Content-Language`, `<html lang>`, the exact self-referencing canonical, and
 the page's own Markdown alternate. For sitemap entries, parse each `<url>`
 block and inspect that block's alternates.
+
+## Inbound protection cannot fix an outbound rate limit
+
+Worker logs showed `429 TooManyRequests` from api.indexnow.org while the same
+payload from a local machine returned 202. Cloudflare's free inbound controls —
+Turnstile, Browser Integrity Check, WAF, rate limiting — protect visitors to
+the zone; they do not proxy or vouch for a Worker's outbound subrequests, and
+Workers have no dedicated egress IP to register with a third party.
+
+**Rule:** when an outbound call is rate-limited by a shared egress pool, no
+amount of inbound configuration or retrying helps. Use an authenticated API
+(Bing Webmaster SubmitUrlbatch with a site-verified key), move the sender to a
+network you control, or treat the push as best-effort and keep sitemap +
+`lastmod` as the source of truth. Also scrub credentials from anything
+loggable: the BWT key is a query parameter, so log error classes and redact
+`apikey=` from response bodies.
