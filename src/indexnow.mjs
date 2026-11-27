@@ -123,7 +123,20 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
   // 200/202 mean accepted; 422 means the key file did not match, which is a
   // real misconfiguration worth logging.
   if (!(response.ok || response.status === 202)) {
-    console.error("indexnow_rejected", response.status);
+    // The body usually says why (rate limited, key not found). Log a bounded
+    // slice so a persistent rejection is diagnosable from the cron logs.
+    let body = "";
+    try {
+      body = (await response.text()).slice(0, 200);
+    } catch {
+      body = "";
+    }
+    console.error(
+      "indexnow_rejected",
+      response.status,
+      `retry-after=${response.headers.get("retry-after") || "none"}`,
+      body,
+    );
     await recordAttempt(db);
     return { status: "error", detail: `HTTP ${response.status}` };
   }
