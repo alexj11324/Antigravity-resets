@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 export function createMemoryD1() {
   const sql = new DatabaseSync(':memory:');
-  for (const file of ['0001_init.sql', '0002_telegram_outbox.sql', '0003_confirm_existing_subscriptions.sql', '0004_email_send_throttle.sql', '0005_reset_translations.sql', '0006_translation_backoff.sql', '0007_site_state.sql']) {
+  for (const file of ['0001_init.sql', '0002_telegram_outbox.sql', '0003_confirm_existing_subscriptions.sql', '0004_email_send_throttle.sql', '0005_reset_translations.sql', '0006_translation_backoff.sql', '0007_site_state.sql', '0008_x_post_deliveries.sql']) {
     sql.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
   }
   function prepare(query) {

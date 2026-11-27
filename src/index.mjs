@@ -1,6 +1,7 @@
 import { handleApiRequest } from "./api.mjs";
 import { handleXWebhook } from "./x-webhook.mjs";
 import { drainTelegramOutbox } from "./telegram-outbox.mjs";
+import { drainXPosts } from "./x-posts.mjs";
 import { langFromPath, SITE_ORIGIN } from "./seo-data.mjs";
 import { handleHtmlRequest } from "./seo-html.mjs";
 import {
@@ -82,13 +83,14 @@ const app = {
     }
     // Alerts first: IndexNow is a crawl hint, the outbox is user-facing.
     // IndexNow still runs after a drain error, then the cron reports failure.
-    const result = await drainTelegramOutbox(env);
+    const [telegram, xPosts] = await Promise.all([drainTelegramOutbox(env), drainXPosts(env)]);
     try {
       await pingIndexNow(env);
     } catch (error) {
       console.error("indexnow_failed", error);
     }
-    if (result.error) throw new Error("Telegram outbox drain failed");
+    if (telegram.error) throw new Error("Telegram outbox drain failed");
+    if (xPosts.error) throw new Error("X post delivery failed");
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
