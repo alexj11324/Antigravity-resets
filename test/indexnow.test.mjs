@@ -26,7 +26,7 @@ test("a new reset triggers exactly one push and records the watermark", async ()
   await ensureSeeded(db);
   const calls = [];
   const fetchImpl = async (url, init) => {
-    calls.push({ url, body: JSON.parse(init.body) });
+    calls.push({ url, body: JSON.parse(init.body), signal: init.signal });
     return new Response(null, { status: 202 });
   };
 
@@ -35,6 +35,7 @@ test("a new reset triggers exactly one push and records the watermark", async ()
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.indexnow.org/indexnow");
   assert.equal(calls[0].body.key, KEY);
+  assert.ok(calls[0].signal instanceof AbortSignal, "a hung endpoint must time out");
   assert.ok(calls[0].body.urlList.includes(`${SITE}/history`));
   assert.ok(calls[0].body.urlList.includes(`${SITE}/ja/history`));
 

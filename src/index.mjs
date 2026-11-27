@@ -80,12 +80,14 @@ const app = {
     } catch (error) {
       console.error("translation_backfill_failed", error);
     }
+    // Alerts first: IndexNow is a crawl hint, the outbox is user-facing.
+    // IndexNow still runs after a drain error, then the cron reports failure.
+    const result = await drainTelegramOutbox(env);
     try {
       await pingIndexNow(env);
     } catch (error) {
       console.error("indexnow_failed", error);
     }
-    const result = await drainTelegramOutbox(env);
     if (result.error) throw new Error("Telegram outbox drain failed");
   },
   async fetch(request, env, ctx) {

@@ -195,6 +195,9 @@ export async function renderLlmsTxt(env) {
     ...LANG_CODES.filter((code) => code !== "en").map(
       (code) => `- [${LANG_LABEL[code]} guide Markdown](${SITE_ORIGIN}/${code}/guide.md)`,
     ),
+    ...LANG_CODES.filter((code) => code !== "en").map(
+      (code) => `- [${LANG_LABEL[code]} history Markdown](${SITE_ORIGIN}${HISTORY_PATH[code]}.md)`,
+    ),
     "",
     "## Public API",
     "",
