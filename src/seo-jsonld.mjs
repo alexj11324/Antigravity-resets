@@ -6,8 +6,33 @@ import { copyFor, formatExact, formatRelative, jsonForScript, originalPostText, 
 const DEVELOPER_ORGANIZATION = Object.freeze({
   name: SITE_NAME,
   url: `${SITE_ORIGIN}/`,
-  sameAs: ["https://x.com/_mohansolo", "https://t.me/antigravity_resets"],
+  // sameAs asserts "this is the same entity", not "related to". It may only
+  // list channels this site operates. @_mohansolo is the person being tracked,
+  // and t.me/antigravity_resets is not the alert channel the UI links to; the
+  // site has no X account of its own.
+  sameAs: ["https://t.me/antigravity_resets_alert"],
+  disambiguatingDescription:
+    "Independent community tracker of publicly announced Google Antigravity quota resets; not affiliated with Google DeepMind or Google Antigravity.",
 });
+
+/**
+ * The site's Organization node. Any page that references
+ * `#organization` must also define it in its own graph: Google parses each
+ * document independently and does not merge @id references across URLs.
+ * @returns {object}
+ */
+export function buildOrganizationNode() {
+  return {
+    "@type": "Organization",
+    "@id": `${SITE_ORIGIN}/#organization`,
+    name: DEVELOPER_ORGANIZATION.name,
+    alternateName: "Antigravity Reset Tracker",
+    url: DEVELOPER_ORGANIZATION.url,
+    logo: `${SITE_ORIGIN}/assets/varun-avatar-512.jpg`,
+    sameAs: DEVELOPER_ORGANIZATION.sameAs,
+    disambiguatingDescription: DEVELOPER_ORGANIZATION.disambiguatingDescription,
+  };
+}
 
 /**
  * The answer shown to both humans and crawlers for "Did Antigravity reset today?".
@@ -18,16 +43,26 @@ const DEVELOPER_ORGANIZATION = Object.freeze({
 export function buildLiveAnswer(data, lang) {
   const meta = pageMeta(lang);
   const latest = data?.stats?.latest;
-  if (!latest) return `${meta.noResetYet} ${meta.answerSuffix}`;
-  const text = originalPostText(latest);
-  const quoted = text ? `"${text}"` : "";
-  const author = `${latest.authorName || "The Antigravity team"} (${latest.authorHandle})`;
-  const when = formatRelative(latest.timestamp, lang);
-  const exact = formatExact(latest.timestamp, lang);
+  if (!latest) return meta.noResetYet;
 
-  return [meta.answerPrefix, meta.answerLead(author, when, exact), quoted, meta.answerSuffix]
-    .filter(Boolean)
-    .join(" ");
+  const resets = Array.isArray(data?.resets) ? data.resets : [];
+  const oldest = resets.length > 0 ? resets[resets.length - 1].timestamp : latest.timestamp;
+  const now = new Date();
+  // "Today" is UTC, stated explicitly, because the answer is copied into FAQ
+  // markup, llms.txt and Markdown where a reader cannot see the timezone.
+  const sameDay =
+    new Date(latest.timestamp).toISOString().slice(0, 10) ===
+    now.toISOString().slice(0, 10);
+
+  return meta.liveAnswer({
+    sameDay,
+    author: `${latest.authorName || "The Antigravity team"} (${latest.authorHandle})`,
+    when: formatRelative(latest.timestamp, lang),
+    exact: formatExact(latest.timestamp, lang),
+    total: Number(data?.stats?.total ?? resets.length ?? 0),
+    since: formatExact(oldest, lang),
+    asOf: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
+  });
 }
 
 /**
@@ -56,14 +91,7 @@ export function buildJsonLd(data, lang, faqEntries = buildFaqEntries(data, lang)
   const oldest = sorted.length > 0 ? sorted[sorted.length - 1] : null;
 
   const graph = [
-    {
-      "@type": "Organization",
-      "@id": `${SITE_ORIGIN}/#organization`,
-      name: DEVELOPER_ORGANIZATION.name,
-      url: DEVELOPER_ORGANIZATION.url,
-      logo: `${SITE_ORIGIN}/assets/varun-avatar-512.jpg`,
-      sameAs: DEVELOPER_ORGANIZATION.sameAs,
-    },
+    buildOrganizationNode(),
     {
       "@type": "WebSite",
       "@id": `${SITE_ORIGIN}/#website`,
@@ -98,27 +126,39 @@ export function buildJsonLd(data, lang, faqEntries = buildFaqEntries(data, lang)
       inLanguage: lang,
       isAccessibleForFree: true,
       creator: { "@id": `${SITE_ORIGIN}/#organization` },
+      license: `${SITE_ORIGIN}/api-docs`,
+      keywords: ["Google Antigravity", "Gemini", "quota reset", "rate limit"],
+      variableMeasured: [
+        "reset timestamp",
+        "reset type",
+        "announcing account",
+        "affected models",
+      ],
       ...(oldest && latest
         ? {
             temporalCoverage: `${new Date(oldest.timestamp).toISOString().slice(0, 10)}/${new Date(latest.timestamp)
               .toISOString()
               .slice(0, 10)}`,
+            datePublished: new Date(oldest.timestamp).toISOString().slice(0, 10),
             dateModified: new Date(latest.timestamp).toISOString(),
           }
         : {}),
       distribution: [
         {
           "@type": "DataDownload",
+          name: "Reset history (JSON)",
           encodingFormat: "application/json",
           contentUrl: `${SITE_ORIGIN}/api/v1/resets`,
         },
         {
           "@type": "DataDownload",
+          name: "Live status (JSON)",
           encodingFormat: "application/json",
           contentUrl: `${SITE_ORIGIN}/api/v1/status`,
         },
         {
           "@type": "DataDownload",
+          name: "Page content (Markdown)",
           encodingFormat: "text/markdown",
           contentUrl: lang === "en" ? `${SITE_ORIGIN}/index.md` : `${SITE_ORIGIN}/${lang}.md`,
         },

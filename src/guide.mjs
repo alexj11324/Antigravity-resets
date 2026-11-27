@@ -3,6 +3,13 @@
 // each language is independently indexable, which a client-side toggle is not.
 
 import { copyFor, escapeHtml, jsonForScript, langUrl, SITE_ORIGIN, SITE_NAME } from "./seo-data.mjs";
+import { buildOrganizationNode } from "./seo-jsonld.mjs";
+
+// Bumped when the guide copy below changes. Kept next to the copy so a content
+// edit and its schema date are one diff.
+const GUIDE_MODIFIED = "2026-11-26";
+
+const OG_LOCALE = { en: "en_US", "zh-CN": "zh_CN", "zh-TW": "zh_TW", ja: "ja_JP", ko: "ko_KR" };
 
 const GUIDE_PATH = {
   en: "/guide",
@@ -19,6 +26,8 @@ const COPY = {
       "A plain explanation of the Antigravity 5-hour window, the weekly cap, what an official reset is, and what this tracker does and does not track.",
     intro:
       "Antigravity does not expose a single countdown. Your remaining capacity comes from two overlapping clocks and, occasionally, from a manual push by the team. This page explains each piece so the numbers on the tracker make sense.",
+    quickAnswer:
+      "Antigravity quota is not one countdown. A rolling five-hour window refills automatically, a weekly cap can pause those refills, and an official reset is an unscheduled extra refill the Antigravity team announces on X. This tracker records only those announcements, never the automatic refreshes.",
     sections: [
       {
         h: "The 5-hour rolling window",
@@ -53,6 +62,8 @@ const COPY = {
       "讲清楚 Antigravity 的 5 小时滚动窗口、周上限、什么是官方重置，以及这个追踪器记录什么、不记录什么。",
     intro:
       "Antigravity 并没有一个统一的倒计时。你的剩余额度由两个重叠的时钟决定，偶尔还会因为团队的额外推送而变化。本页把每一部分拆开说明，这样追踪器上的数字才说得通。",
+    quickAnswer:
+      "Antigravity 的额度不是一个倒计时：约 5 小时的滚动窗口会自动恢复，之上的周上限可能让恢复暂停，而官方重置是团队在 X 上额外公布的、计划外的补充。本追踪器只记录这类公告，不记录每天自动发生的刷新。",
     sections: [
       {
         h: "5 小时滚动窗口",
@@ -87,6 +98,8 @@ const COPY = {
       "講清楚 Antigravity 的 5 小時滾動視窗、週上限、什麼是官方重置，以及這個追蹤器記錄什麼、不記錄什麼。",
     intro:
       "Antigravity 並沒有一個統一的倒數計時。你的剩餘額度由兩個重疊的時鐘決定，偶爾還會因為團隊的額外推送而改變。本頁把每一部分拆開說明，這樣追蹤器上的數字才說得通。",
+    quickAnswer:
+      "Antigravity 的額度不是一個倒數計時：約 5 小時的滾動視窗會自動恢復，之上的週上限可能讓恢復暫停，而官方重置是團隊在 X 上額外公布的、計畫外的補充。本追蹤器只記錄這類公告，不記錄每天自動發生的重新整理。",
     sections: [
       {
         h: "5 小時滾動視窗",
@@ -121,6 +134,8 @@ const COPY = {
       "Antigravity の 5 時間ローリングウィンドウ、週上限、公式リセットとは何か、この追跡サイトが記録するもの・しないものを説明します。",
     intro:
       "Antigravity に単一のカウントダウンはありません。残量は重なり合う 2 つの時計と、ときどき行われるチームからの追加付与で決まります。このページで各部分を分けて説明するので、追跡サイトの数字が読めるようになります。",
+    quickAnswer:
+      "Antigravity のクォータは 1 つのカウントダウンではありません。約 5 時間のローリングウィンドウが自動で回復し、その上の週上限が回復を止めることがあり、公式リセットはチームが X で告知する予定外の追加付与です。この追跡サイトはその告知だけを記録します。",
     sections: [
       {
         h: "5 時間のローリングウィンドウ",
@@ -155,6 +170,8 @@ const COPY = {
       "Antigravity 의 5시간 롤링 윈도우, 주간 상한, 공식 리셋이 무엇인지, 그리고 이 추적 사이트가 무엇을 기록하고 무엇을 기록하지 않는지 설명합니다.",
     intro:
       "Antigravity 에는 단일 카운트다운이 없습니다. 남은 용량은 겹치는 두 개의 시계와, 때때로 팀이 추가로 지급하는 리셋으로 결정됩니다. 이 페이지에서 각 부분을 나눠 설명하므로 추적 사이트의 숫자를 이해할 수 있습니다.",
+    quickAnswer:
+      "Antigravity 할당량은 하나의 카운트다운이 아닙니다. 약 5시간 롤링 윈도우가 자동으로 회복되고, 그 위의 주간 상한이 회복을 멈출 수 있으며, 공식 리셋은 팀이 X에서 알리는 예정에 없던 추가 지급입니다. 이 추적 사이트는 그 공지만 기록합니다.",
     sections: [
       {
         h: "5시간 롤링 윈도우",
@@ -198,6 +215,8 @@ export function renderGuideMarkdown(lang) {
     `# ${copy.title}`,
     "",
     copy.intro,
+    "",
+    `> ${copy.quickAnswer}`,
     "",
     ...copy.sections.flatMap((section) => [`## ${section.h}`, "", section.p, ""]),
     `[${copy.back}](${canonical})`,
@@ -246,6 +265,7 @@ export function handleGuideRequest(request, env, pathname) {
   const article = {
     "@context": "https://schema.org",
     "@graph": [
+      buildOrganizationNode(),
       {
         "@type": "Article",
         "@id": `${canonical}#article`,
@@ -254,6 +274,9 @@ export function handleGuideRequest(request, env, pathname) {
         inLanguage: lang,
         url: canonical,
         mainEntityOfPage: canonical,
+        image: `${SITE_ORIGIN}/og-image.jpg`,
+        datePublished: "2026-11-26",
+        dateModified: GUIDE_MODIFIED,
         isAccessibleForFree: true,
         author: { "@id": `${SITE_ORIGIN}/#organization` },
         publisher: { "@id": `${SITE_ORIGIN}/#organization` },
@@ -291,6 +314,7 @@ export function handleGuideRequest(request, env, pathname) {
     <meta property="og:image" content="${SITE_ORIGIN}/og-image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="${OG_LOCALE[lang] || "en_US"}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${SITE_ORIGIN}/og-image.jpg" />
     <link rel="icon" type="image/png" sizes="256x256" href="/favicon.png" />
@@ -316,18 +340,23 @@ export function handleGuideRequest(request, env, pathname) {
       <main>
         <h1 class="section-title" style="font-size:2rem;margin:18px 0 12px">${escapeHtml(copy.title)}</h1>
         <p class="section-sub" style="font-size:1.0625rem">${escapeHtml(copy.intro)}</p>
+        <p class="guide-answer">${escapeHtml(copy.quickAnswer)}</p>
         ${body}
         <p><a class="text-link" href="${home}">${escapeHtml(copy.back)} &rarr;</a></p>
       </main>
       <footer class="site-footer">
         <p class="footer-disclaimer">${escapeHtml(copyFor(lang).footerDisclaimer || "")}</p>
-        <div class="footer-links">
+        <nav class="footer-links" aria-label="Related pages">
           <a class="text-link" href="${home}">${escapeHtml(SITE_NAME)}</a>
           <span aria-hidden="true">&middot;</span>
           <a class="text-link" href="/api-docs">API</a>
           <span aria-hidden="true">&middot;</span>
           <a class="text-link" href="/llms.txt">llms.txt</a>
-        </div>
+          <span aria-hidden="true">&middot;</span>
+          <a class="text-link" href="/about">About</a>
+          <span aria-hidden="true">&middot;</span>
+          <a class="text-link" href="/privacy">Privacy</a>
+        </nav>
       </footer>
     </div>
   </body>
@@ -353,6 +382,7 @@ export function handleGuideMarkdownRequest(lang) {
     headers: {
       "Content-Type": "text/markdown; charset=utf-8",
       "Content-Language": resolved,
+      "X-Robots-Tag": "noindex",
       "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
     },
   });

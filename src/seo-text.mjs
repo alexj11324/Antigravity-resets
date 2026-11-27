@@ -182,6 +182,8 @@ export async function renderLlmsTxt(env) {
     ),
     `- [API documentation](${SITE_ORIGIN}/api-docs): request and response reference for the public endpoints.`,
     `- [How Antigravity quota works](${SITE_ORIGIN}/guide): the 5-hour window, weekly cap, and what an official reset is.`,
+    `- [About](${SITE_ORIGIN}/about): who runs the tracker and how announcements are verified.`,
+    `- [Privacy](${SITE_ORIGIN}/privacy): what an email subscription stores and how to remove it.`,
     "",
     "## Markdown versions (LLM friendly)",
     "",
@@ -220,14 +222,28 @@ export async function renderLlmsTxt(env) {
  */
 export async function renderSitemap(env) {
   const data = await loadSeoData(env);
+  // The home cluster really does change when a reset lands. The guide and the
+  // API reference do not: giving them the reset date claims freshness they do
+  // not have, so each carries its own last content edit.
   const lastmod = data.stats.latest
     ? new Date(data.stats.latest.timestamp).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
+  const GUIDE_LASTMOD = "2026-11-26";
+  const API_DOCS_LASTMOD = "2026-11-26";
 
   const alternates = LANG_CODES.map(
     (code) => `<xhtml:link rel="alternate" hreflang="${code}" href="${langUrl(code)}" />`,
   )
     .concat(`<xhtml:link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/" />`)
+    .join("\n    ");
+
+  // The guide cluster declares the same reciprocal set in its HTML, so the
+  // sitemap must carry it too or the signal is only half published.
+  const guideAlternates = LANG_CODES.map(
+    (code) =>
+      `<xhtml:link rel="alternate" hreflang="${code}" href="${SITE_ORIGIN}${GUIDE_PATH[code]}" />`,
+  )
+    .concat(`<xhtml:link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/guide" />`)
     .join("\n    ");
 
   const homeEntries = LANG_CODES.map((code) => {
@@ -248,7 +264,8 @@ export async function renderSitemap(env) {
         [
           "  <url>",
           `    <loc>${SITE_ORIGIN}${path}</loc>`,
-          `    <lastmod>${lastmod}</lastmod>`,
+          `    ${guideAlternates}`,
+          `    <lastmod>${GUIDE_LASTMOD}</lastmod>`,
           "    <changefreq>monthly</changefreq>",
           `    <priority>0.7</priority>`,
           "  </url>",
@@ -263,9 +280,21 @@ export async function renderSitemap(env) {
     guideEntries,
     "  <url>",
     `    <loc>${SITE_ORIGIN}/api-docs</loc>`,
-    `    <lastmod>${lastmod}</lastmod>`,
+    `    <lastmod>${API_DOCS_LASTMOD}</lastmod>`,
     "    <changefreq>monthly</changefreq>",
     "    <priority>0.5</priority>",
+    "  </url>",
+    "  <url>",
+    `    <loc>${SITE_ORIGIN}/about</loc>`,
+    `    <lastmod>${API_DOCS_LASTMOD}</lastmod>`,
+    "    <changefreq>yearly</changefreq>",
+    "    <priority>0.3</priority>",
+    "  </url>",
+    "  <url>",
+    `    <loc>${SITE_ORIGIN}/privacy</loc>`,
+    `    <lastmod>${API_DOCS_LASTMOD}</lastmod>`,
+    "    <changefreq>yearly</changefreq>",
+    "    <priority>0.3</priority>",
     "  </url>",
     "</urlset>",
     "",
@@ -287,13 +316,18 @@ export function renderRobots() {
     "PerplexityBot",
     "Google-Extended",
   ];
+  // Cloudflare's Content Signals policy. Every crawler this file names is
+  // already allowed to read the site, so the signal states the same policy in
+  // machine-readable form: citation, AI input, and training are all permitted.
+  const contentSignal = "Content-Signal: search=yes, ai-input=yes, ai-train=yes";
   return [
     "# Antigravity Resets",
     `# AI and search discovery document: ${SITE_ORIGIN}/llms.txt`,
     "",
-    ...aiAgents.map((agent) => `User-agent: ${agent}\nAllow: /`),
+    ...aiAgents.map((agent) => `User-agent: ${agent}\n${contentSignal}\nAllow: /`),
     "",
     "User-agent: *",
+    contentSignal,
     "Allow: /",
     "Disallow: /api/v1/admin/",
     "",
@@ -314,6 +348,8 @@ export async function renderMarkdownResponse(env, lang) {
     headers: {
       "Content-Type": "text/markdown; charset=utf-8",
       "Content-Language": lang,
+      // Alternate representation, not a second indexable page.
+      "X-Robots-Tag": "noindex",
       "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
     },
   });

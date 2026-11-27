@@ -91,8 +91,8 @@ test("sitemap carries hreflang for all locales and no redirecting URL", async ()
   }
   assert.ok(body.includes(`${SITE}/api-docs`), "api-docs must be listed");
   assert.ok(!body.includes(`${SITE}/api/docs<`), "redirecting URL must not be listed");
-  // Five locale home pages, five locale guide pages, plus api-docs.
-  assert.equal(body.match(/<loc>/g).length, 11, "five homes, five guides, api-docs");
+  // Five locale homes, five locale guides, api-docs, about, privacy.
+  assert.equal(body.match(/<loc>/g).length, 13, "five homes, five guides, api-docs, about, privacy");
   assert.ok(body.includes(`${SITE}/guide`), "English guide must be listed");
   assert.ok(body.includes(`${SITE}/ja/guide`), "localized guides must be listed");
 });
@@ -215,6 +215,57 @@ test("each guide page points at its own Markdown mirror and that mirror exists",
     assert.match(mirror.headers.get("content-type"), /text\/markdown/);
     assert.match(await mirror.text(), /^# /, `${md} must carry the guide content`);
   }
+});
+
+test("robots.txt states the same content policy for every group", async () => {
+  const text = await (
+    await worker.fetch(new Request(`${SITE}/robots.txt`), env, ctx)
+  ).text();
+  const groups = text.split(/\n{2,}/).filter((group) => group.includes("User-agent:"));
+  assert.ok(groups.length >= 2);
+  for (const group of groups) {
+    assert.match(
+      group,
+      /Content-Signal: search=yes, ai-input=yes, ai-train=yes/,
+      "a group without Content-Signal silently opts out of the stated policy",
+    );
+  }
+});
+
+test("unknown URLs return a real HTML 404 that is not indexable", async () => {
+  const res = await worker.fetch(new Request(`${SITE}/no-such-page`), env, ctx);
+  assert.equal(res.status, 404);
+  assert.match(res.headers.get("content-type"), /text\/html/);
+  assert.match(res.headers.get("x-robots-tag") || "", /noindex/);
+  const body = await res.text();
+  assert.match(body, /Page not found/);
+  assert.match(body, /href="\/"/);
+});
+
+test("Markdown mirrors stay fetchable but are not indexable", async () => {
+  const res = await worker.fetch(new Request(`${SITE}/guide.md`), env, ctx);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("x-robots-tag") || "", /noindex/);
+});
+
+test("the guide defines the organization its Article references", async () => {
+  const html = await (await worker.fetch(new Request(`${SITE}/guide`), env, ctx)).text();
+  const block = html.match(
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/,
+  )?.[1];
+  assert.ok(block, "guide must carry JSON-LD");
+  const graph = JSON.parse(block)["@graph"];
+  const ids = new Set(graph.map((node) => node["@id"]));
+  const article = graph.find((node) => node["@type"] === "Article");
+  assert.ok(ids.has(article.author["@id"]), "author @id must resolve inside the document");
+  assert.ok(ids.has(article.publisher["@id"]));
+});
+
+test("the guide carries a self-contained answer block", async () => {
+  const html = await (await worker.fetch(new Request(`${SITE}/guide`), env, ctx)).text();
+  assert.match(html, /class="guide-answer"/);
+  const md = await (await worker.fetch(new Request(`${SITE}/guide.md`), env, ctx)).text();
+  assert.match(md, /^> /m, "the Markdown mirror must keep the quotable answer");
 });
 
 test("the API catalog points at the OpenAPI document and the human docs", async () => {

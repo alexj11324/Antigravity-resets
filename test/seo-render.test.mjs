@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildHeadHtml, renderAnnouncementsHtml, renderFaqHtml } from "../src/seo-html.mjs";
 import { buildAnnouncementsMarkdown } from "../src/seo-text.mjs";
-import { buildLiveAnswer } from "../src/seo-jsonld.mjs";
+import { buildJsonLd, buildLiveAnswer } from "../src/seo-jsonld.mjs";
 import { LANG_CODES, escapeHtml } from "../src/seo-data.mjs";
 
 const SITE = "https://antigravity-resets.com";
@@ -129,7 +129,10 @@ test("all locales use the complete original post in HTML, Markdown, and live ans
     const markdown = buildAnnouncementsMarkdown(data.resets, lang);
     const answer = buildLiveAnswer(data, lang);
     assert.ok(html.includes(escapeHtml(quote)), lang);
-    assert.ok(answer.includes(quote), lang);
+    // The live answer is deliberately a short self-contained sentence now, so
+    // it carries the author and time rather than the whole post.
+    assert.ok(answer.includes(data.resets[0].authorHandle), lang);
+    assert.ok(answer.length > 40, `${lang} answer must be a full sentence`);
     assert.match(markdown, /> Original Thanksgiving post\\\.\n> All users have a reset\\!/);
     assert.ok(markdown.includes("Full original content\\. ".repeat(12)), lang);
     for (const summary of Object.values(data.resets[0].summary)) {
@@ -138,6 +141,37 @@ test("all locales use the complete original post in HTML, Markdown, and live ans
       assert.ok(!answer.includes(summary), lang);
     }
   }
+});
+
+test("the live answer never says Yes for a reset outside today in UTC", () => {
+  const now = new Date();
+  const utcMidnight = (offsetDays) =>
+    new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offsetDays, 1, 0, 0),
+    ).toISOString();
+
+  const yesterdayData = sampleData();
+  yesterdayData.resets[0].timestamp = utcMidnight(-1);
+  assert.match(
+    buildLiveAnswer(yesterdayData, "en"),
+    /^No reset today \(UTC\) yet/,
+    "a reset yesterday must not be answered with Yes",
+  );
+
+  const todayData = sampleData();
+  todayData.resets[0].timestamp = utcMidnight(0);
+  assert.match(buildLiveAnswer(todayData, "en"), /^Yes\./);
+});
+
+test("the organization entity never claims the tracked account", () => {
+  const graph = buildJsonLd(sampleData(), "en")["@graph"];
+  const org = graph.find((node) => node["@type"] === "Organization");
+  assert.ok(org, "Organization node must exist");
+  assert.ok(
+    !org.sameAs.some((url) => url.includes("_mohansolo")),
+    "sameAs asserts identity; the tracked account is not this site",
+  );
+  assert.ok(org.sameAs.includes("https://t.me/antigravity_resets_alert"));
 });
 
 test("missing originals never turn generated summaries into author text", () => {
