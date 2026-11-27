@@ -44,7 +44,7 @@ test("a new reset triggers exactly one push and records the watermark", async ()
   assert.equal(calls.length, 1, "the same reset must not be pushed again");
 });
 
-test("a rejected push leaves the watermark untouched so the next tick retries", async () => {
+test("a rejected push leaves the watermark untouched so a later tick retries", async () => {
   const db = createMemoryD1();
   await ensureSeeded(db);
   let calls = 0;
@@ -53,12 +53,59 @@ test("a rejected push leaves the watermark untouched so the next tick retries", 
     return new Response(null, { status: 422 });
   };
   await pingIndexNow({ DB: db, INDEXNOW_KEY: KEY }, fail);
+  const state = await db
+    .prepare("SELECT value FROM site_state WHERE key = 'indexnow_last_reset'")
+    .first();
+  assert.ok(!state, "a rejected push must not advance the watermark");
+
+  // After the backoff window the same reset is attempted again.
+  await db
+    .prepare("UPDATE site_state SET value = ? WHERE key = 'indexnow_last_attempt'")
+    .bind(String(Date.now() - 16 * 60 * 1000))
+    .run();
   const retry = await pingIndexNow({ DB: db, INDEXNOW_KEY: KEY }, async () => {
     calls += 1;
     return new Response(null, { status: 202 });
   });
   assert.equal(retry.status, "sent");
   assert.equal(calls, 2);
+});
+
+test("a 429 backs off instead of hammering the endpoint every tick", async () => {
+  const db = createMemoryD1();
+  await ensureSeeded(db);
+  let calls = 0;
+  const reject = async () => {
+    calls += 1;
+    return new Response(null, { status: 429 });
+  };
+  const first = await pingIndexNow({ DB: db, INDEXNOW_KEY: KEY }, reject);
+  assert.equal(first.status, "error");
+  const second = await pingIndexNow({ DB: db, INDEXNOW_KEY: KEY }, reject);
+  assert.equal(second.status, "backoff");
+  assert.equal(calls, 1, "the retry must wait out the backoff window");
+});
+
+test("a success clears the backoff for the next reset", async () => {
+  const db = createMemoryD1();
+  await ensureSeeded(db);
+  await pingIndexNow(
+    { DB: db, INDEXNOW_KEY: KEY },
+    async () => new Response(null, { status: 429 }),
+  );
+  await db
+    .prepare("UPDATE site_state SET value = ? WHERE key = 'indexnow_last_attempt'")
+    .bind(String(Date.now() - 16 * 60 * 1000))
+    .run();
+  const sent = await pingIndexNow(
+    { DB: db, INDEXNOW_KEY: KEY },
+    async () => new Response(null, { status: 202 }),
+  );
+  assert.equal(sent.status, "sent");
+  const attempt = await db
+    .prepare("SELECT value FROM site_state WHERE key = 'indexnow_last_attempt'")
+    .first();
+  assert.ok(!attempt, "a success must clear the backoff");
 });
 
 test("without a key or database the ping is a no-op", async () => {
