@@ -53,6 +53,26 @@ const COPY = {
         h: "How this tracker decides what counts",
         p: "A post is accepted only when an official account announces a broad reset that is live or explicitly scheduled. Teasers, polls, retrospectives, quota increases without a reset, routine explanations of the five-hour window, and one-on-one support replies are all rejected. Disagreements between the automated checks are escalated to a second model and then to a human.",
       },
+      {
+        h: "A worked example",
+        p: "Suppose you exhaust the five-hour window at 09:00. Capacity returns gradually as that usage ages out, roughly five hours later, with no announcement and nothing to track. If the weekly cap is also exhausted, those automatic refills pause and the meter stays flat until the weekly timer rolls over. An official reset is the only event that changes that picture out of schedule, which is why the tracker records it and nothing else.",
+      },
+      {
+        h: "What does not count as a reset",
+        p: "A teaser, a poll asking whether you want a reset, a retrospective about a past reset, a quota increase that raises the ceiling without refilling usage, a routine explanation of the five-hour window, and a one-to-one support reply are all rejected. So is every automatic five-hour refresh, even though your meter moves. The only test is whether an official account announced an out-of-schedule refill that applies broadly.",
+      },
+      {
+        h: "How the statistics are computed",
+        p: "Average interval is the mean number of days between consecutive confirmed announcements, not between your personal refills. Longest wait is the largest gap on record. Both are computed from the verified archive only: rejected candidates and automatic refreshes never enter the calculation, so the numbers describe how often the team grants extra capacity, not how often your meter moves.",
+      },
+      {
+        h: "Why your personal meter is not shown",
+        p: "The tracker never asks for your Google account, so it cannot read your remaining quota. That is a deliberate limit: an alert service that could see your usage would need access it does not need. Use /usage or /quota in the CLI, or Settings then Models in the IDE, for the number that applies to you.",
+      },
+      {
+        h: "Why resets are announced on X first",
+        p: "Official resets are announced on X before anywhere else. That is the channel the Antigravity team actually uses, so it is also the fastest public signal available: the tracker reads those posts directly rather than waiting for documentation, release notes, or forum threads to catch up. When a post is ambiguous, the tracker waits for the follow-up instead of guessing.",
+      },
     ],
     back: "Back to the live tracker",
   },
@@ -88,6 +108,26 @@ const COPY = {
       {
         h: "追踪器如何判定",
         p: "只有官方账号宣布的、已经生效或明确排期的全局重置才会被接受。预告、投票、回顾、只提高额度上限而不重置用量、对 5 小时窗口的常规解释、以及一对一客服回复，都会被拒绝。自动判定出现分歧时，会升级到第二个模型，再交给人工复核。",
+      },
+      {
+        h: "一个具体例子",
+        p: "假设你在 09:00 用完 5 小时窗口的额度。随着这批用量在约 5 小时后滑出窗口，额度会逐步恢复，过程中没有任何公告，也没有什么可追踪的。如果周上限也已耗尽，这些自动恢复会暂停，额度条会一直不动，直到周计时器重置。官方重置是唯一能让这个局面提前改变的额外事件，所以追踪器只记录它。",
+      },
+      {
+        h: "什么不算重置",
+        p: "预告、询问是否想要重置的投票、对过去重置的回顾、只提高上限而不补充用量的额度上调、对 5 小时窗口的常规解释、以及一对一客服回复，都会被拒绝。每一次自动的 5 小时刷新也一样，即使你的额度条确实动了。判断标准只有一条：是否有官方账号宣布了一次适用于广泛用户的、计划外的补充。",
+      },
+      {
+        h: "统计口径",
+        p: "平均间隔是相邻两次已确认公告之间的平均天数，不是你自己额度恢复的间隔。最长等待是记录中最大的空档。两者都只基于已核实的档案计算：被拒绝的候选和自动刷新从不进入计算，所以这些数字描述的是团队额外发放额度的频率，而不是你的额度条多久动一次。",
+      },
+      {
+        h: "为什么不显示你的个人额度",
+        p: "追踪器从不索取你的 Google 账号，因此无法读取你的剩余额度。这是刻意的限制：一个能看到你用量的提醒服务，需要它本不需要的权限。要看属于你的数字，请在 CLI 里运行 /usage 或 /quota，或在 IDE 中打开 Settings 里的 Models。",
+      },
+      {
+        h: "为什么重置总是先出现在 X 上",
+        p: "官方重置总是先公布在 X 上。这是 Antigravity 团队实际使用的渠道，因此也是最快的公开信号：追踪器直接读取这些帖子，而不是等文档、发布说明或论坛帖子跟上。当一条帖子含义不明时，追踪器会等后续说明，而不是猜。",
       },
     ],
     back: "返回实时追踪页",
@@ -125,6 +165,26 @@ const COPY = {
         h: "追蹤器如何判定",
         p: "只有官方帳號宣布的、已經生效或明確排程的全局重置才會被接受。預告、投票、回顧、只提高額度上限而不重置用量、對 5 小時視窗的常規解釋、以及一對一客服回覆，都會被拒絕。自動判定出現分歧時，會升級到第二個模型，再交給人工複核。",
       },
+      {
+        h: "一個具體例子",
+        p: "假設你在 09:00 用完 5 小時視窗的額度。隨著這批用量在約 5 小時後滑出視窗，額度會逐步恢復，過程中沒有任何公告，也沒有什麼可追蹤的。如果週上限也已耗盡，這些自動恢復會暫停，額度條會一直不動，直到週計時器重置。官方重置是唯一能讓這個局面提前改變的額外事件，所以追蹤器只記錄它。",
+      },
+      {
+        h: "什麼不算重置",
+        p: "預告、詢問是否想要重置的投票、對過去重置的回顧、只提高上限而不補充用量的額度上調、對 5 小時視窗的常規解釋、以及一對一客服回覆，都會被拒絕。每一次自動的 5 小時刷新也一樣，即使你的額度條確實動了。判斷標準只有一條：是否有官方帳號宣布了一次適用於廣泛使用者的、計畫外的補充。",
+      },
+      {
+        h: "統計口徑",
+        p: "平均間隔是相鄰兩次已確認公告之間的平均天數，不是你自己額度恢復的間隔。最長等待是紀錄中最大的空檔。兩者都只基於已核實的檔案計算：被拒絕的候選和自動刷新從不進入計算，所以這些數字描述的是團隊額外發放額度的頻率，而不是你的額度條多久動一次。",
+      },
+      {
+        h: "為什麼不顯示你的個人額度",
+        p: "追蹤器從不索取你的 Google 帳號，因此無法讀取你的剩餘額度。這是刻意的限制：一個能看到你用量的提醒服務，需要它本不需要的權限。要看屬於你的數字，請在 CLI 裡執行 /usage 或 /quota，或在 IDE 中開啟 Settings 裡的 Models。",
+      },
+      {
+        h: "為什麼重置總是先出現在 X 上",
+        p: "官方重置總是先公布在 X 上。這是 Antigravity 團隊實際使用的管道，因此也是最快的公開訊號：追蹤器直接讀取這些貼文，而不是等文件、發布說明或論壇貼文跟上。當一則貼文含義不明時，追蹤器會等後續說明，而不是猜。",
+      },
     ],
     back: "返回即時追蹤頁",
   },
@@ -161,6 +221,26 @@ const COPY = {
         h: "判定のしかた",
         p: "公式アカウントが、すでに有効か明確に予定された全体リセットを告知した場合のみ採用します。ティザー、投票、振り返り、リセットを伴わない上限引き上げ、5 時間ウィンドウの定型的な説明、1 対 1 のサポート返信はすべて却下します。自動判定が割れた場合は 2 つ目のモデルに、それでも決まらない場合は人間の確認に回します。",
       },
+      {
+        h: "具体例",
+        p: "5 時間ウィンドウの割当を 09:00 に使い切ったとします。その使用量が約 5 時間かけてウィンドウから外れるにつれて容量は徐々に戻り、その間に告知はなく、追跡すべき出来事もありません。週上限も使い切っている場合、この自動回復は止まり、週のタイマーが戻るまでメーターは動きません。公式リセットは、この状況を予定外に変える唯一の出来事であり、追跡サイトが記録するのはそれだけです。",
+      },
+      {
+        h: "リセットと見なされないもの",
+        p: "ティーザー、リセットを望むか尋ねる投票、過去のリセットの振り返り、使用量を戻さず上限だけを上げる発表、5 時間ウィンドウの定型的な説明、1 対 1 のサポート返信は、すべて却下されます。自動の 5 時間更新も同様です。メーターが動いても記録しません。判断基準は 1 つだけです。公式アカウントが、広く適用される予定外の補充を告知したかどうか。",
+      },
+      {
+        h: "統計の算出方法",
+        p: "平均間隔は、連続する確認済み告知の間の平均日数であり、あなた個人の回復間隔ではありません。最長待機は記録上の最大の空白です。どちらも検証済みのアーカイブだけから計算します。却下された候補や自動更新は計算に入らないため、これらの数字はチームが追加容量を付与する頻度を表し、あなたのメーターが動く頻度ではありません。",
+      },
+      {
+        h: "個人のメーターを表示しない理由",
+        p: "追跡サイトは Google アカウントを要求しないため、残りの割当を読むことはできません。これは意図的な制限です。利用状況を見られる通知サービスは、本来不要な権限を必要としてしまいます。自分に適用される数字は、CLI の /usage または /quota、あるいは IDE の Settings > Models で確認してください。",
+      },
+      {
+        h: "リセットが最初に X で告知される理由",
+        p: "公式リセットは何より先に X で告知されます。Antigravity チームが実際に使っているチャネルであり、最も早い公開シグナルでもあります。追跡サイトはドキュメントやリリースノート、フォーラムが追いつくのを待たず、投稿を直接読みます。投稿が曖昧な場合は、推測せず続報を待ちます。",
+      },
     ],
     back: "ライブ追跡ページへ戻る",
   },
@@ -196,6 +276,26 @@ const COPY = {
       {
         h: "판정 방식",
         p: "공식 계정이 이미 적용되었거나 명확히 예정된 전체 리셋을 발표한 경우에만 채택합니다. 티저, 투표, 회고, 리셋 없이 상한만 올리는 발표, 5시간 윈도우에 대한 정형 설명, 1 대 1 지원 답변은 모두 거부합니다. 자동 판정이 갈리면 두 번째 모델로, 그래도 갈리면 사람이 검토합니다.",
+      },
+      {
+        h: "구체적인 예",
+        p: "5시간 윈도우의 할당량을 09:00에 모두 썼다고 가정해 봅시다. 그 사용량이 약 5시간에 걸쳐 윈도우에서 빠지면서 용량이 서서히 돌아오고, 그동안 어떤 공지도 없으며 추적할 사건도 없습니다. 주간 상한까지 소진했다면 이 자동 회복은 멈추고, 주간 타이머가 돌아올 때까지 미터는 움직이지 않습니다. 공식 리셋은 이 상황을 예정에 없이 바꾸는 유일한 사건이며, 추적 사이트는 그것만 기록합니다.",
+      },
+      {
+        h: "리셋으로 보지 않는 것",
+        p: "티저, 리셋을 원하는지 묻는 투표, 과거 리셋 회고, 사용량은 되돌리지 않고 상한만 올리는 발표, 5시간 윈도우에 대한 정형 설명, 1대1 지원 답변은 모두 거부됩니다. 자동 5시간 갱신도 마찬가지입니다. 미터가 움직여도 기록하지 않습니다. 판단 기준은 하나입니다. 공식 계정이 널리 적용되는 예정에 없던 보충을 알렸는가.",
+      },
+      {
+        h: "통계 계산 방식",
+        p: "평균 간격은 연속된 확인된 공지 사이의 평균 일수이며, 개인의 회복 간격이 아닙니다. 최장 대기는 기록상 가장 큰 공백입니다. 둘 다 검증된 아카이브만으로 계산합니다. 거부된 후보와 자동 갱신은 계산에 들어가지 않으므로, 이 숫자는 팀이 추가 용량을 지급하는 빈도를 뜻하며 미터가 움직이는 빈도가 아닙니다.",
+      },
+      {
+        h: "개인 미터를 표시하지 않는 이유",
+        p: "추적 사이트는 Google 계정을 요구하지 않으므로 남은 할당량을 읽을 수 없습니다. 이는 의도된 제한입니다. 사용량을 볼 수 있는 알림 서비스는 필요 없는 권한을 요구하게 됩니다. 내게 적용되는 숫자는 CLI의 /usage 또는 /quota, 또는 IDE의 Settings > Models에서 확인하세요.",
+      },
+      {
+        h: "리셋이 가장 먼저 X에 올라오는 이유",
+        p: "공식 리셋은 무엇보다 먼저 X에서 공지됩니다. Antigravity 팀이 실제로 사용하는 채널이자 가장 빠른 공개 신호입니다. 추적 사이트는 문서나 릴리스 노트, 포럼이 따라올 때까지 기다리지 않고 게시물을 직접 읽습니다. 게시물이 모호하면 추측하지 않고 후속 설명을 기다립니다.",
       },
     ],
     back: "실시간 추적 페이지로 돌아가기",

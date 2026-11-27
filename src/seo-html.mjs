@@ -61,6 +61,7 @@ const UI_COPY_TARGETS = Object.freeze([
   ["#faqHeading", "faqHeading"],
   ["#apiDocsLink", "apiDocsLink"],
   ["#guideLink", "guideLink"],
+  ["#historyLink", "historyLink"],
   ["#sponsorDialogTitle", "advertiseModalTitle"],
   ["#closeSponsorBtn", "close"],
   ["#emailSubmitBtn", "emailBtn"],
@@ -342,6 +343,11 @@ export async function handleHtmlRequest(request, env, lang) {
     .on("#footerDisclaimer", {
       element(el) {
         el.setInnerContent(copy.footerDisclaimer || "");
+      },
+    })
+    .on("#historyLink", {
+      element(el) {
+        el.setAttribute("href", lang === "en" ? "/history" : `/${lang}/history`);
       },
     })
     .on("#guideLink", {

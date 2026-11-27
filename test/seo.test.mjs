@@ -92,7 +92,7 @@ test("sitemap carries hreflang for all locales and no redirecting URL", async ()
   assert.ok(body.includes(`${SITE}/api-docs`), "api-docs must be listed");
   assert.ok(!body.includes(`${SITE}/api/docs<`), "redirecting URL must not be listed");
   // Five locale homes, five locale guides, api-docs, about, privacy.
-  assert.equal(body.match(/<loc>/g).length, 13, "five homes, five guides, api-docs, about, privacy");
+  assert.equal(body.match(/<loc>/g).length, 18, "homes, history, guides, api-docs, about, privacy");
   assert.ok(body.includes(`${SITE}/guide`), "English guide must be listed");
   assert.ok(body.includes(`${SITE}/ja/guide`), "localized guides must be listed");
 });
@@ -229,6 +229,35 @@ test("robots.txt states the same content policy for every group", async () => {
       /Content-Signal: search=yes, ai-input=yes, ai-train=yes/,
       "a group without Content-Signal silently opts out of the stated policy",
     );
+  }
+});
+
+test("the history page is server-rendered with machine-readable dates", async () => {
+  for (const [path, mdPath] of [
+    ["/history", "/history.md"],
+    ["/zh-CN/history", "/zh-CN/history.md"],
+    ["/ja/history", "/ja/history.md"],
+  ]) {
+    const res = await worker.fetch(new Request(`${SITE}${path}`), env, ctx);
+    assert.equal(res.status, 200, path);
+    const html = await res.text();
+    assert.ok((html.match(/<time datetime="/g) || []).length >= 15, `${path} needs dated rows`);
+    assert.match(html, /type="application\/ld\+json"/);
+    assert.ok(html.includes(`${SITE}${path}`), "canonical must be self-referencing");
+
+    const md = await worker.fetch(new Request(`${SITE}${mdPath}`), env, ctx);
+    assert.equal(md.status, 200, mdPath);
+    assert.match(md.headers.get("content-type"), /text\/markdown/);
+    assert.match(await md.text(), /^\| --- \|/m, "Markdown mirror needs a table");
+  }
+});
+
+test("the sitemap lists history pages with hreflang", async () => {
+  const body = await (
+    await worker.fetch(new Request(`${SITE}/sitemap.xml`), env, ctx)
+  ).text();
+  for (const path of ["/history", "/zh-CN/history", "/ja/history"]) {
+    assert.ok(body.includes(`${SITE}${path}</loc>`), path);
   }
 });
 

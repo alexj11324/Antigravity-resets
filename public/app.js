@@ -139,6 +139,7 @@ const els = {
   footerDisclaimer: document.getElementById("footerDisclaimer"),
   apiDocsLink: document.getElementById("apiDocsLink"),
   guideLink: document.getElementById("guideLink"),
+  historyLink: document.getElementById("historyLink"),
   sponsorDialog: document.getElementById("sponsorDialog"),
   sponsorDialogTitle: document.getElementById("sponsorDialogTitle"),
   sponsorDialogDesc: document.getElementById("sponsorDialogDesc"),
@@ -894,6 +895,9 @@ function render() {
   els.apiDocsLink.textContent = c.apiDocsLink;
   els.guideLink.textContent = c.guideLink;
   els.guideLink.href = state.locale === "en" ? "/guide" : `/${state.locale}/guide`;
+  els.historyLink.textContent = c.historyLink;
+  els.historyLink.href =
+    state.locale === "en" ? "/history" : `/${state.locale}/history`;
 
   els.sponsorDialogTitle.textContent = c.advertiseModalTitle;
   els.sponsorDialogDesc.textContent = c.advertiseModalDesc;

@@ -106,6 +106,7 @@ export const COPY = {
     faqHeading: "Antigravity reset FAQ",
     apiDocsLink: "Public API (/api-docs)",
     guideLink: "How quota works",
+    historyLink: "Full history",
     footerDisclaimer: "Independent community tracker. Not affiliated with Google DeepMind or Google Antigravity. Powered by X webhooks, Gemini Decisions API, and Cloudflare Workers.",
     relative: {
       justNow: "just now",
@@ -211,6 +212,7 @@ export const COPY = {
     faqHeading: "常见问题 FAQ",
     apiDocsLink: "公开 API (/api-docs)",
     guideLink: "配额机制说明",
+    historyLink: "完整历史",
     footerDisclaimer: "独立社区追踪站，与 Google DeepMind 或 Google Antigravity 无官方隶属关系。基于 X Webhook、Gemini Decisions API 与 Cloudflare Workers 实时驱动。",
     relative: {
       justNow: "刚刚",
@@ -316,6 +318,7 @@ export const COPY = {
     faqHeading: "常見問題 FAQ",
     apiDocsLink: "公開 API (/api-docs)",
     guideLink: "配額機制說明",
+    historyLink: "完整歷史",
     footerDisclaimer: "獨立社群追蹤站，與 Google DeepMind 或 Google Antigravity 無官方隸屬關係。由 X Webhook、Gemini Decisions API 與 Cloudflare Workers 即時驅動。",
     relative: {
       justNow: "剛剛",
@@ -421,6 +424,7 @@ export const COPY = {
     faqHeading: "よくある質問",
     apiDocsLink: "公開 API (/api-docs)",
     guideLink: "クォータの仕組み",
+    historyLink: "履歴一覧",
     footerDisclaimer: "独立したコミュニティサイトであり、Google DeepMind または Google Antigravity とは無関係です。X Webhook、Gemini Decisions API、Cloudflare Workers で稼働しています。",
     relative: {
       justNow: "たった今",
@@ -526,6 +530,7 @@ export const COPY = {
     faqHeading: "자주 묻는 질문",
     apiDocsLink: "공개 API (/api-docs)",
     guideLink: "할당량 구조",
+    historyLink: "전체 기록",
     footerDisclaimer: "독립 커뮤니티 트래커이며 Google DeepMind 또는 Google Antigravity와 공식 제휴 관계가 아닙니다. X 웹훅, Gemini Decisions API 및 Cloudflare Workers로 운영됩니다.",
     relative: {
       justNow: "방금 전",
