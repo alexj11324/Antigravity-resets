@@ -118,5 +118,16 @@
 - [x] robots.txt Content-Signal（search/ai-input/ai-train = yes）
 - [x] 生产 Lighthouse：Accessibility / Best Practices / SEO / Agentic 全 100
 - [x] GSC 已能读（Restricted）：首页已收录、canonical 匹配
-- [ ] 服务账号升级为 Full 后：提交 sitemap、请求索引、跑 28 天查询
-- [ ] guide 扩写至 800 词、首页 FAQ 去重（内容工作）
+- [x] 服务账号升级为 Full：已提交 sitemap（0 错误 / 0 警告）、抽查首页与关键页
+- [x] guide 扩写至约 800 词（11 节）
+- [ ] 首页 FAQ 与 guide 内容去重（内容工作）
+
+## SEO 第二批：history / guide / IndexNow（2026-11-27）
+
+- [x] `/history` 五种语言 SSR：`<time datetime>`、Dataset + BreadcrumbList、hreflang、Markdown 镜像
+- [x] guide 每种语言扩到 11 节：例子、什么不算、统计口径、个人额度、为什么 X 首发
+- [x] IndexNow：`site_state` 水位表；cron 仅在新重置时推送；失败不写水位
+- [x] 生产上线：`/{key}.txt` 200、`/history` 200、sitemap 18 条、llms.txt 本地化镜像
+- [x] 评审跟进（PR #23）：按 locale 断言 language/canonical/mirror、Markdown 转义、5s 超时、先 drain 用户告警、site_state 缺失日志
+- [x] GSC 重新提交 18 URL sitemap（2026-11-27T01:39Z，0 错误 / 0 警告，待重新下载）
+- [ ] 剩余低优先级：`http://www` 两跳收敛为一条 Redirect Rule；静态资源缓存头

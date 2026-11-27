@@ -148,3 +148,35 @@ real blocker was a property-level permission, not a missing credential.
 **Rule:** when a tool ships a `--check` for a capability, run that, not an
 improvised probe. Report "the account cannot see this property" separately from
 "no credentials exist" — they lead to different fixes.
+
+## A clean `git status` is not enough in a shared working directory
+
+Another agent session switched HEAD in the same worktree between my
+`git checkout -b` and my `git add -A && git commit`. The commit landed on
+`codex/fix-linux-do-badge`, and the follow-up push created an empty branch
+under the name I intended. No work was lost, but the other session's branch
+was briefly ahead by a commit it did not author.
+
+**Rules:**
+- Before committing, print `git status --short --branch` and confirm the
+  branch is the one you expect. A clean tree only says nothing is untracked.
+- Never `git add -A` in a worktree other sessions may share. Stage explicit
+  paths so their files cannot be swept into your commit.
+- Give any branch you will commit on its own `git worktree`. The main
+  checkout is not a lock.
+- If a commit lands on the wrong branch: cherry-pick it onto the right base in
+  a temporary worktree, restore the other branch to its original tip with
+  `git reset --hard <tip>` only after confirming the tree is clean, and never
+  force-push someone else's branch.
+
+## A test that matches text every page carries cannot detect a locale regression
+
+The history locale test asserted `html.includes(SITE + "/zh-CN/history")`.
+Every history page lists all locales in its hreflang alternates, so a render
+that ignored the requested locale would still pass. The sitemap test had the
+same shape: it searched the whole document for each URL.
+
+**Rule:** assert per-page invariants instead of document-wide substrings —
+`Content-Language`, `<html lang>`, the exact self-referencing canonical, and
+the page's own Markdown alternate. For sitemap entries, parse each `<url>`
+block and inspect that block's alternates.
