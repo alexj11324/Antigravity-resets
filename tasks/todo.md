@@ -134,4 +134,5 @@
 - [x] 静态资源保持 `max-age=0, must-revalidate` + 强 ETag（文件名无内容哈希，长缓存会拿到旧 JS/CSS，属有意选择）
 - [x] IndexNow 匿名通道被出口 IP 限流（429 TooManyRequests，无 Retry-After）→ 失败退避 1 小时、成功才写水位
 - [x] 认证式通道：设置 `BING_WEBMASTER_API_KEY` 后优先走 Bing Webmaster SubmitUrlbatch；日志对 key 脱敏
-- [ ] 待账号操作：Bing Webmaster 验证站点并设置 `BING_WEBMASTER_API_KEY`（key 到位后自动启用，无需改代码）
+- [x] Bing Webmaster 已完成 GSC 导入与站点验证，生产绑定 `BING_WEBMASTER_API_KEY`
+- [x] 认证通道首次成功：2026-11-27T02:17:39Z 写入水位 `2026-11-26T07:19:24Z`，`indexnow_last_attempt` 由成功路径清除
