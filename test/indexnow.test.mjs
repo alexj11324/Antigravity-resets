@@ -147,7 +147,14 @@ test("an API key cannot leak into a logged rejection body", () => {
   // scrubbed, in its raw and URL-encoded forms.
   assert.equal(redactSecret("key secret123 rejected", "secret123"), "key <redacted> rejected");
   assert.equal(redactSecret("key secret%20123 rejected", "secret 123"), "key <redacted> rejected");
+  assert.equal(redactSecret("key secret+123 rejected", "secret 123"), "key <redacted> rejected");
+  assert.equal(redactSecret("key secret%2fkey rejected", "secret/key"), "key <redacted> rejected");
   assert.equal(redactSecret("nothing to hide", ""), "nothing to hide");
+  // Redaction must run before truncation: a key crossing the 200-char log
+  // boundary would otherwise leave its prefix in the log.
+  const raw = `${"x".repeat(190)}secret123${"y".repeat(50)}`;
+  const logged = redactApiKey(redactSecret(raw, "secret123")).slice(0, 200);
+  assert.ok(!logged.includes("secret12"), "no prefix of the key may survive");
 });
 
 test("without a key or database the ping is a no-op", async () => {

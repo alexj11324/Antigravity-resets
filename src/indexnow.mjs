@@ -23,7 +23,7 @@ const ATTEMPT_KEY = "indexnow_last_attempt";
 const RETRY_AFTER_MS = 60 * 60 * 1000;
 
 /**
- * Primary control: redact the secret by value, including its URL-encoded form.
+ * Primary control: redact the secret by value, including common encodings.
  * A body that echoes the key without naming the `apikey` parameter would slip
  * past a pattern-only rule.
  * @param {unknown} value
@@ -33,8 +33,16 @@ const RETRY_AFTER_MS = 60 * 60 * 1000;
 export function redactSecret(value, secret) {
   let out = String(value ?? "");
   if (!secret) return out;
-  for (const form of new Set([secret, encodeURIComponent(secret)])) {
-    out = out.split(form).join("<redacted>");
+  const encoded = encodeURIComponent(secret);
+  const forms = new Set([secret, encoded]);
+  // Percent-escapes may arrive lower-cased, and form encoding turns spaces
+  // into `+`. Cover both so no spelling of the key survives.
+  for (const form of [...forms]) {
+    forms.add(form.toLowerCase());
+    forms.add(form.replace(/%20/g, "+"));
+  }
+  for (const form of forms) {
+    if (form) out = out.split(form).join("<redacted>");
   }
   return out;
 }
@@ -175,13 +183,13 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
   // 200/202 mean accepted; 422 means the key file did not match, which is a
   // real misconfiguration worth logging.
   if (!(response.ok || response.status === 202)) {
-    // The body usually says why (rate limited, key not found). Log a bounded
-    // slice so a persistent rejection is diagnosable from the cron logs.
+    // The body usually says why (rate limited, key not found). Redact the full
+    // text before cutting it: truncating first can split the key across the
+    // boundary so the by-value rule no longer matches, leaking a prefix.
     let body = "";
     try {
-      body = redactApiKey(
-        redactSecret((await response.text()).slice(0, 200), bingKey),
-      );
+      const text = await response.text();
+      body = redactApiKey(redactSecret(text, bingKey)).slice(0, 200);
     } catch {
       body = "";
     }
