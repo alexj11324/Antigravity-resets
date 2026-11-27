@@ -44,6 +44,35 @@ test("a new reset triggers exactly one push and records the watermark", async ()
   assert.equal(calls.length, 1, "the same reset must not be pushed again");
 });
 
+test("a Bing Webmaster key switches the push to the authenticated API", async () => {
+  const db = createMemoryD1();
+  await ensureSeeded(db);
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return new Response(null, { status: 200 });
+  };
+
+  const result = await pingIndexNow(
+    { DB: db, BING_WEBMASTER_API_KEY: "bing-key" },
+    fetchImpl,
+  );
+  assert.equal(result.status, "sent");
+  assert.equal(result.detail, "bing-webmaster");
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].url,
+    "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=bing-key",
+  );
+  assert.equal(calls[0].body.siteUrl, `${SITE}/`);
+  assert.ok(calls[0].body.urlList.includes(`${SITE}/history`));
+  assert.equal(
+    calls[0].body.key,
+    undefined,
+    "the anonymous key must not leak into the BWT body",
+  );
+});
+
 test("a rejected push leaves the watermark untouched so a later tick retries", async () => {
   const db = createMemoryD1();
   await ensureSeeded(db);
@@ -61,7 +90,7 @@ test("a rejected push leaves the watermark untouched so a later tick retries", a
   // After the backoff window the same reset is attempted again.
   await db
     .prepare("UPDATE site_state SET value = ? WHERE key = 'indexnow_last_attempt'")
-    .bind(String(Date.now() - 16 * 60 * 1000))
+    .bind(String(Date.now() - 61 * 60 * 1000))
     .run();
   const retry = await pingIndexNow({ DB: db, INDEXNOW_KEY: KEY }, async () => {
     calls += 1;
@@ -95,7 +124,7 @@ test("a success clears the backoff for the next reset", async () => {
   );
   await db
     .prepare("UPDATE site_state SET value = ? WHERE key = 'indexnow_last_attempt'")
-    .bind(String(Date.now() - 16 * 60 * 1000))
+    .bind(String(Date.now() - 61 * 60 * 1000))
     .run();
   const sent = await pingIndexNow(
     { DB: db, INDEXNOW_KEY: KEY },

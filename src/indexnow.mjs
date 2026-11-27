@@ -1,18 +1,26 @@
-// IndexNow push. Google ignores this protocol, but Bing/Copilot, Yandex, Naver,
+// Search-engine push. Google ignores IndexNow, but Bing/Copilot, Yandex, Naver,
 // and Seznam use it, and a brand-new domain has no crawl history to fall back
 // on. The cron compares the newest reset timestamp with the last one it pushed,
 // so a reset costs one request rather than one per tick.
+//
+// Two transports, in order of reliability:
+// 1. Bing Webmaster SubmitUrlbatch, when BING_WEBMASTER_API_KEY is set. It is
+//    authenticated against a verified site and has its own quota, so it does
+//    not depend on anonymous-IP reputation.
+// 2. Anonymous IndexNow. api.indexnow.org rate-limits the shared Workers egress
+//    pool (429 TooManyRequests, no Retry-After), so this is best-effort.
 
 import { SITE_ORIGIN } from "./seo-data.mjs";
 import { LANG_CODES } from "./seo-data.mjs";
 
 const ENDPOINT = "https://api.indexnow.org/indexnow";
+const BING_ENDPOINT = "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch";
 const STATE_KEY = "indexnow_last_reset";
 const ATTEMPT_KEY = "indexnow_last_attempt";
-// IndexNow rate-limits aggressively, and Workers share egress IPs, so a 429 is
-// expected. Retrying on every cron tick keeps the limit tripped; a failure now
-// schedules the next attempt 15 minutes out instead.
-const RETRY_AFTER_MS = 15 * 60 * 1000;
+// The 429 body ("you have sent too many requests") carries no Retry-After, so
+// pick a spacing that stays well under a per-IP limit: at most one attempt an
+// hour, while a new reset after a success still pushes immediately.
+const RETRY_AFTER_MS = 60 * 60 * 1000;
 
 /**
  * Remember a failed attempt so the next tick does not hammer the endpoint.
@@ -65,8 +73,9 @@ export function indexNowUrls() {
  */
 export async function pingIndexNow(env, fetchImpl = fetch) {
   const key = env?.INDEXNOW_KEY;
+  const bingKey = env?.BING_WEBMASTER_API_KEY;
   const db = env?.DB;
-  if (!key || !db) return { status: "skipped", detail: "not configured" };
+  if ((!key && !bingKey) || !db) return { status: "skipped", detail: "not configured" };
 
   let latest;
   try {
@@ -98,24 +107,38 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     return { status: "skipped", detail: "site_state unavailable" };
   }
 
-  const keyLocation = `${SITE_ORIGIN}/${key}.txt`;
+  const urlList = indexNowUrls();
+  // The trailing slash on siteUrl must match how the site is verified in Bing
+  // Webmaster Tools; the apex with a trailing slash is that form.
+  const request = bingKey
+    ? {
+        channel: "bing-webmaster",
+        endpoint: `${BING_ENDPOINT}?apikey=${encodeURIComponent(bingKey)}`,
+        body: JSON.stringify({ siteUrl: `${SITE_ORIGIN}/`, urlList }),
+      }
+    : {
+        channel: "indexnow",
+        endpoint: ENDPOINT,
+        body: JSON.stringify({
+          host: new URL(SITE_ORIGIN).host,
+          key,
+          keyLocation: `${SITE_ORIGIN}/${key}.txt`,
+          urlList,
+        }),
+      };
+
   let response;
   try {
-    response = await fetchImpl(ENDPOINT, {
+    response = await fetchImpl(request.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       // The cron also drains user-facing alerts; a hung endpoint must not
       // hold that up for the whole invocation budget.
-      signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({
-        host: new URL(SITE_ORIGIN).host,
-        key,
-        keyLocation,
-        urlList: indexNowUrls(),
-      }),
+      signal: AbortSignal.timeout(10000),
+      body: request.body,
     });
   } catch (error) {
-    console.error("indexnow_failed", error?.message || "network");
+    console.error("indexnow_failed", request.channel, error?.message || "network");
     await recordAttempt(db);
     return { status: "error", detail: "network" };
   }
@@ -133,6 +156,7 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     }
     console.error(
       "indexnow_rejected",
+      request.channel,
       response.status,
       `retry-after=${response.headers.get("retry-after") || "none"}`,
       body,
@@ -154,5 +178,5 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     console.error("indexnow_state_write_failed", error?.message || "unknown");
   }
 
-  return { status: "sent" };
+  return { status: "sent", detail: request.channel };
 }
