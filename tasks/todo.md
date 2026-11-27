@@ -101,3 +101,22 @@
 - [x] 首页 footer 增加 guide 链接（按语言指向对应版本）
 - [x] `llms.txt` 增加 guide Markdown 链接
 - [x] 测试 137/137；线上 Lighthouse Accessibility 90 → 100
+
+## 插件全量审计（2026-11-27）
+
+- [x] 8 个子代理并行：technical / content / schema / visual / SXO / backlinks / google / geo
+- [x] Critical：`Yes` 答案在 UTC 日界后仍成立 → 改为显式 UTC 日 + as-of + 首屏渲染
+- [x] `Organization.sameAs` 去掉被追踪账号，只保留本站 Telegram
+- [x] `/guide` Article 悬空 `#organization` → 每页自带实体定义
+- [x] 公告与 hero 时间改用 `<time datetime>`
+- [x] `.md` 镜像加 `X-Robots-Tag: noindex`
+- [x] 404 返回真实 HTML 页面
+- [x] sitemap guide 补 hreflang；新增 /about、/privacy
+- [x] Dataset 补 license（GSC 警告）、keywords、variableMeasured
+- [x] `/about`、`/privacy` 上线并接入所有 footer
+- [x] 移动端表格堆叠、图标 40px、theme-color 跟随主题
+- [x] robots.txt Content-Signal（search/ai-input/ai-train = yes）
+- [x] 生产 Lighthouse：Accessibility / Best Practices / SEO / Agentic 全 100
+- [x] GSC 已能读（Restricted）：首页已收录、canonical 匹配
+- [ ] 服务账号升级为 Full 后：提交 sitemap、请求索引、跑 28 天查询
+- [ ] guide 扩写至 800 词、首页 FAQ 去重（内容工作）
