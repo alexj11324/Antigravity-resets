@@ -187,6 +187,8 @@ body {
 .presence-badge strong {
   color: var(--ink);
   font-weight: 700;
+  min-inline-size: 2ch;
+  text-align: end;
 }
 
 .presence-dot {

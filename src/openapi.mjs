@@ -72,7 +72,11 @@ export function buildOpenApi() {
                         },
                       },
                       thanksCount: { type: "integer" },
-                      onlineCount: { type: "integer" },
+                      onlineCount: {
+                        type: ["integer", "null"],
+                        minimum: 0,
+                        description: "Sessions active in the last 90 seconds, or null when presence storage is unavailable.",
+                      },
                       generatedAt: { type: "string", format: "date-time" },
                     },
                   },
