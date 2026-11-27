@@ -233,10 +233,10 @@ test("robots.txt states the same content policy for every group", async () => {
 });
 
 test("the history page is server-rendered with machine-readable dates", async () => {
-  for (const [path, mdPath] of [
-    ["/history", "/history.md"],
-    ["/zh-CN/history", "/zh-CN/history.md"],
-    ["/ja/history", "/ja/history.md"],
+  for (const [path, mdPath, homePath] of [
+    ["/history", "/history.md", "/"],
+    ["/zh-CN/history", "/zh-CN/history.md", "/zh-CN"],
+    ["/ja/history", "/ja/history.md", "/ja"],
   ]) {
     const res = await worker.fetch(new Request(`${SITE}${path}`), env, ctx);
     assert.equal(res.status, 200, path);
@@ -248,7 +248,9 @@ test("the history page is server-rendered with machine-readable dates", async ()
     const md = await worker.fetch(new Request(`${SITE}${mdPath}`), env, ctx);
     assert.equal(md.status, 200, mdPath);
     assert.match(md.headers.get("content-type"), /text\/markdown/);
-    assert.match(await md.text(), /^\| --- \|/m, "Markdown mirror needs a table");
+    const markdown = await md.text();
+    assert.match(markdown, /^\| --- \|/m, "Markdown mirror needs a table");
+    assert.ok(markdown.trimEnd().endsWith(`](${SITE}${homePath})`), "Markdown back link must open the localized live tracker");
   }
 });
 

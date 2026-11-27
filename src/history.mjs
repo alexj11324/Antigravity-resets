@@ -5,6 +5,7 @@
 import {
   escapeHtml,
   formatExact,
+  langUrl,
   loadSeoData,
   safeHttpsUrl,
   SITE_ORIGIN,
@@ -291,7 +292,7 @@ export async function handleHistoryMarkdownRequest(env, lang) {
       return `| ${formatExact(item.timestamp, lang)} | ${copy.types[item.type] || copy.types.regular} | ${item.authorName} (${item.authorHandle}) | ${models} | ${href ? `[${copy.source}](${href})` : "—"} |`;
     }),
     "",
-    `[${copy.back}](${SITE_ORIGIN}${HISTORY_PATH[code]})`,
+    `[${copy.back}](${langUrl(code)})`,
     "",
   ];
 
