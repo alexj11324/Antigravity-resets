@@ -34,11 +34,20 @@
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title="Antigravity Resets RSS" href="/feed.xml" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      href="/fonts/plus-jakarta-sans-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/jetbrains-mono-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -176,6 +185,7 @@
           type="email"
           autocomplete="email"
           placeholder="you@example.com"
+          aria-label="Email address"
           required
         />
         <button id="emailSubmitBtn" type="submit" class="pill-btn yellow-btn">
@@ -329,7 +339,9 @@
         <div id="footerLangs" class="footer-langs"></div>
         <p id="footerDisclaimer" class="footer-disclaimer"></p>
         <div class="footer-links">
-          <a id="apiDocsLink" class="text-link" href="/api/docs">Public API (/api/docs)</a>
+          <a id="apiDocsLink" class="text-link" href="/api-docs">Public API (/api-docs)</a>
+          <span aria-hidden="true">·</span>
+          <a id="guideLink" class="text-link" href="/guide">How quota works</a>
           <span aria-hidden="true">·</span>
           <a class="text-link" href="/api-docs#mcp">MCP server</a>
           <span aria-hidden="true">·</span>

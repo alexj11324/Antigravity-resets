@@ -1,3 +1,41 @@
+/* Self-hosted variable fonts. Loading them from fonts.googleapis.com made a
+ * render-blocking third-party request (~710 ms on mobile) and the late swap
+ * moved the banner stack, which was the page's only large layout shift.
+ * JetBrains Mono uses `optional`: its metrics move the most between fallback
+ * and webfont, and a system mono fallback is visually fine. */
+@font-face {
+  font-family: "Fredoka";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/fredoka-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: optional;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Antigravity Resets — Neo-Brutalist Comic Card Production Theme
  * Upgraded scale, pinned heatmap weekday axis, 22px calendar cells,
  * floating dark tooltips above targets, multi-click thanks sticker bursts,
@@ -19,6 +57,9 @@
   --pink: #ffb9cc;
   --blue: #a5dcff;
   --coral: #ff5c2b;
+  /* Text-safe coral: #ff5c2b on --bg is 2.82:1, below the 4.5:1 AA floor.
+     Fills keep --coral; only text uses this darker tone. */
+  --coral-text: #c2410c;
   --peach: #ffb07a;
   --cell-empty: #f1e3c4;
   --green: #22c55e;
@@ -46,6 +87,7 @@
   --pink: #f6a4be;
   --blue: #89ceff;
   --coral: #ff7056;
+  --coral-text: #ff7056;
   --peach: #f6b57c;
   --cell-empty: #2f2a24;
   --hairline: rgba(246, 240, 228, 0.18);
@@ -240,7 +282,7 @@ body {
 }
 
 .subtitle a {
-  color: var(--coral);
+  color: var(--coral-text);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -368,7 +410,7 @@ body {
   margin: -6px 0 16px 4px;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 .email-panel {
@@ -401,7 +443,7 @@ body {
   margin: 4px 0 0 6px;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 /* Upcoming Expected / Watch Reset Banner */
@@ -456,7 +498,7 @@ body {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 .upcoming-title {
@@ -703,7 +745,7 @@ body {
   background: transparent;
   font: inherit;
   font-weight: 600;
-  color: var(--coral);
+  color: var(--coral-text);
   border-bottom: 2px dotted var(--coral);
   cursor: pointer;
 }
@@ -1152,6 +1194,11 @@ body {
   transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Quiet days are plain divs: no pointer affordance, no touch target. */
+div.heat-cell {
+  cursor: default;
+}
+
 .heat-cell:hover,
 .heat-cell:focus-visible {
   transform: scale(1.22);
@@ -1303,7 +1350,7 @@ body {
 }
 
 .x-link {
-  color: var(--coral);
+  color: var(--coral-text);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -1353,14 +1400,14 @@ body {
 }
 
 .faq-trigger:hover {
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 .faq-icon {
   font-family: "JetBrains Mono", monospace;
   font-size: 1.35rem;
   line-height: 1;
-  color: var(--coral);
+  color: var(--coral-text);
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
   flex-shrink: 0;
 }
@@ -1421,7 +1468,7 @@ body {
 }
 
 .footer-lang-btn[aria-current="true"] {
-  color: var(--coral);
+  color: var(--coral-text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1508,6 +1555,12 @@ body {
   margin-bottom: 18px;
 }
 
+.docs-endpoint {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
 .docs-method {
   display: inline-block;
   font-family: "JetBrains Mono", monospace;
@@ -1527,6 +1580,92 @@ body {
   font-weight: 700;
 }
 
+/* On-this-page navigation and reference tables */
+.docs-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 22px;
+  padding: 12px 16px;
+  background: var(--surface-warm);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 2px 3px 0 var(--shadow);
+}
+
+.docs-toc a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-style: dotted;
+}
+
+.docs-toc a:hover {
+  color: var(--coral-text);
+}
+
+section[id] {
+  scroll-margin-top: 20px;
+}
+
+.docs-heading {
+  font-size: 1.25rem;
+  margin: 0 0 8px;
+}
+
+.docs-subheading {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+
+.docs-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.docs-table th,
+.docs-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1.5px solid var(--hairline);
+}
+
+.docs-table th {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.docs-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.docs-card code,
+.subtitle code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.875em;
+  background: var(--surface-warm);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -1537,7 +1676,9 @@ body {
 /* Mobile Responsive (390x844 progressive compression matching codex-resets.com) */
 @media (max-width: 640px) {
   :root {
-    --cell-size: 18px;
+    /* 24px keeps every heatmap cell a legal touch target; the grid already
+       scrolls horizontally, so the extra width costs nothing. */
+    --cell-size: 24px;
     --cell-gap: 4px;
   }
 

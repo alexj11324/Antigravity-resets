@@ -60,6 +60,7 @@ const UI_COPY_TARGETS = Object.freeze([
   ["#announcementsSub", "announcementsSub"],
   ["#faqHeading", "faqHeading"],
   ["#apiDocsLink", "apiDocsLink"],
+  ["#guideLink", "guideLink"],
   ["#sponsorDialogTitle", "advertiseModalTitle"],
   ["#closeSponsorBtn", "close"],
   ["#emailSubmitBtn", "emailBtn"],
@@ -162,7 +163,7 @@ export function buildHeadHtml(data, lang, faqEntries) {
     `<link rel="alternate" type="text/markdown" title="Markdown" href="${
       lang === "en" ? `${SITE_ORIGIN}/index.md` : `${SITE_ORIGIN}/${lang}.md`
     }" />`,
-    `<link rel="alternate" type="text/plain" title="llms.txt" href="${SITE_ORIGIN}/llms.txt" />`,
+    `<link rel="service-doc" type="text/plain" title="llms.txt" href="${SITE_ORIGIN}/llms.txt" />`,
     `<meta property="og:locale" content="${OG_LOCALE[lang] || "en_US"}" />`,
     renderJsonLdScript(data, lang, faqEntries),
   ].join("");
@@ -333,6 +334,13 @@ export async function handleHtmlRequest(request, env, lang) {
     .on("#footerDisclaimer", {
       element(el) {
         el.setInnerContent(copy.footerDisclaimer || "");
+      },
+    })
+    .on("#guideLink", {
+      element(el) {
+        // Each locale has its own server-rendered guide; point at the one the
+        // reader can actually understand instead of bouncing through English.
+        el.setAttribute("href", lang === "en" ? "/guide" : `/${lang}/guide`);
       },
     });
 

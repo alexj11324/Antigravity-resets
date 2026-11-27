@@ -8,6 +8,9 @@ node_modules/
 !.env.example
 *.log
 
+# Performance traces captured while auditing Core Web Vitals
+.trace/
+
 # Local agent tooling, not part of the deployable project
 .agents/
 .claude/

@@ -186,6 +186,10 @@ export async function renderLlmsTxt(env) {
     "## Markdown versions (LLM friendly)",
     "",
     ...LANG_CODES.map((code) => `- [${LANG_LABEL[code]} Markdown](${mdUrl(code)})`),
+    `- [Guide Markdown](${SITE_ORIGIN}/guide.md)`,
+    ...LANG_CODES.filter((code) => code !== "en").map(
+      (code) => `- [${LANG_LABEL[code]} guide Markdown](${SITE_ORIGIN}/${code}/guide.md)`,
+    ),
     "",
     "## Public API",
     "",
