@@ -8,6 +8,40 @@ import { LANG_CODES } from "./seo-data.mjs";
 
 const ENDPOINT = "https://api.indexnow.org/indexnow";
 const STATE_KEY = "indexnow_last_reset";
+const ATTEMPT_KEY = "indexnow_last_attempt";
+// IndexNow rate-limits aggressively, and Workers share egress IPs, so a 429 is
+// expected. Retrying on every cron tick keeps the limit tripped; a failure now
+// schedules the next attempt 15 minutes out instead.
+const RETRY_AFTER_MS = 15 * 60 * 1000;
+
+/**
+ * Remember a failed attempt so the next tick does not hammer the endpoint.
+ * @param {object} db
+ */
+async function recordAttempt(db) {
+  try {
+    await db
+      .prepare(
+        "INSERT INTO site_state (key, value) VALUES (?, ?) " +
+          "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+      )
+      .bind(ATTEMPT_KEY, String(Date.now()))
+      .run();
+  } catch (error) {
+    console.error("indexnow_attempt_write_failed", error?.message || "unknown");
+  }
+}
+
+/**
+ * @param {object} db
+ */
+async function clearAttempt(db) {
+  try {
+    await db.prepare("DELETE FROM site_state WHERE key = ?").bind(ATTEMPT_KEY).run();
+  } catch (error) {
+    console.error("indexnow_attempt_clear_failed", error?.message || "unknown");
+  }
+}
 
 /**
  * @param {object} env
@@ -49,6 +83,14 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
       .bind(STATE_KEY)
       .first();
     if (state?.value === ts) return { status: "unchanged" };
+    const attempt = await db
+      .prepare("SELECT value FROM site_state WHERE key = ?")
+      .bind(ATTEMPT_KEY)
+      .first();
+    const lastAttempt = Number(attempt?.value || 0);
+    if (lastAttempt > 0 && Date.now() - lastAttempt < RETRY_AFTER_MS) {
+      return { status: "backoff" };
+    }
   } catch (error) {
     // Silence here would disable IndexNow forever if 0007 never ran, with no
     // signal anywhere. One log line makes that misconfiguration findable.
@@ -74,6 +116,7 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     });
   } catch (error) {
     console.error("indexnow_failed", error?.message || "network");
+    await recordAttempt(db);
     return { status: "error", detail: "network" };
   }
 
@@ -81,9 +124,11 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
   // real misconfiguration worth logging.
   if (!(response.ok || response.status === 202)) {
     console.error("indexnow_rejected", response.status);
+    await recordAttempt(db);
     return { status: "error", detail: `HTTP ${response.status}` };
   }
 
+  await clearAttempt(db);
   try {
     await db
       .prepare(
