@@ -12,7 +12,9 @@ import {
 import { handleMcpRequest } from "./mcp.mjs";
 import { buildOpenApi } from "./openapi.mjs";
 import { handleGuideMarkdownRequest, handleGuideRequest } from "./guide.mjs";
+import { handleHistoryMarkdownRequest, handleHistoryRequest } from "./history.mjs";
 import { translatePendingResets } from "./translate.mjs";
+import { pingIndexNow } from "./indexnow.mjs";
 
 const APEX_HOST = "antigravity-resets.com";
 const WWW_HOST = `www.${APEX_HOST}`;
@@ -77,6 +79,11 @@ const app = {
       await translatePendingResets(env, 2);
     } catch (error) {
       console.error("translation_backfill_failed", error);
+    }
+    try {
+      await pingIndexNow(env);
+    } catch (error) {
+      console.error("indexnow_failed", error);
     }
     const result = await drainTelegramOutbox(env);
     if (result.error) throw new Error("Telegram outbox drain failed");
@@ -190,6 +197,17 @@ const app = {
       });
     }
 
+    // IndexNow key file. The key is public by design; it proves the site
+    // controls this host when the cron pushes new URLs to the endpoint.
+    if (env?.INDEXNOW_KEY && pathname === `/${env.INDEXNOW_KEY}.txt`) {
+      return new Response(String(env.INDEXNOW_KEY), {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
     if (pathname === "/robots.txt") {
       return new Response(renderRobots(), {
         headers: {
@@ -214,6 +232,16 @@ const app = {
 
     if (pathname === "/guide" || /^\/(zh-CN|zh-TW|ja|ko)\/guide$/.test(pathname)) {
       return handleGuideRequest(request, env, pathname);
+    }
+
+    const historyMarkdownMatch = pathname.match(/^\/(?:(zh-CN|zh-TW|ja|ko)\/)?history\.md$/);
+    if (historyMarkdownMatch) {
+      return handleHistoryMarkdownRequest(env, historyMarkdownMatch[1] || "en");
+    }
+
+    if (pathname === "/history" || /^\/(zh-CN|zh-TW|ja|ko)\/history$/.test(pathname)) {
+      const lang = pathname === "/history" ? "en" : pathname.split("/")[1];
+      return handleHistoryRequest(env, lang);
     }
 
     const lang = langFromPath(pathname);

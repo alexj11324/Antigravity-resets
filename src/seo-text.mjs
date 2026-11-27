@@ -18,6 +18,7 @@ import {
 } from "./seo-data.mjs";
 import { buildFaqEntries, buildLiveAnswer } from "./seo-jsonld.mjs";
 import { GUIDE_PATH } from "./guide.mjs";
+import { HISTORY_PATH } from "./history.mjs";
 
 function mdPath(lang) {
   return lang === "en" ? "/index.md" : `/${lang}.md`;
@@ -182,6 +183,7 @@ export async function renderLlmsTxt(env) {
     ),
     `- [API documentation](${SITE_ORIGIN}/api-docs): request and response reference for the public endpoints.`,
     `- [How Antigravity quota works](${SITE_ORIGIN}/guide): the 5-hour window, weekly cap, and what an official reset is.`,
+    `- [Reset history](${SITE_ORIGIN}/history): every verified reset as a table with dates, accounts, and source links.`,
     `- [About](${SITE_ORIGIN}/about): who runs the tracker and how announcements are verified.`,
     `- [Privacy](${SITE_ORIGIN}/privacy): what an email subscription stores and how to remove it.`,
     "",
@@ -189,6 +191,7 @@ export async function renderLlmsTxt(env) {
     "",
     ...LANG_CODES.map((code) => `- [${LANG_LABEL[code]} Markdown](${mdUrl(code)})`),
     `- [Guide Markdown](${SITE_ORIGIN}/guide.md)`,
+    `- [History Markdown](${SITE_ORIGIN}/history.md)`,
     ...LANG_CODES.filter((code) => code !== "en").map(
       (code) => `- [${LANG_LABEL[code]} guide Markdown](${SITE_ORIGIN}/${code}/guide.md)`,
     ),
@@ -258,6 +261,28 @@ export async function renderSitemap(env) {
     ].join("\n");
   }).join("\n");
 
+  const historyAlternates = LANG_CODES.map(
+    (code) =>
+      `<xhtml:link rel="alternate" hreflang="${code}" href="${SITE_ORIGIN}${HISTORY_PATH[code]}" />`,
+  )
+    .concat(`<xhtml:link rel="alternate" hreflang="x-default" href="${SITE_ORIGIN}/history" />`)
+    .join("\n    ");
+
+  const historyEntries = Object.entries(HISTORY_PATH)
+    .map(
+      ([code, path]) =>
+        [
+          "  <url>",
+          `    <loc>${SITE_ORIGIN}${path}</loc>`,
+          `    ${historyAlternates}`,
+          `    <lastmod>${lastmod}</lastmod>`,
+          "    <changefreq>daily</changefreq>",
+          "    <priority>0.8</priority>",
+          "  </url>",
+        ].join("\n"),
+    )
+    .join("\n");
+
   const guideEntries = Object.entries(GUIDE_PATH)
     .map(
       ([code, path]) =>
@@ -277,6 +302,7 @@ export async function renderSitemap(env) {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     homeEntries,
+    historyEntries,
     guideEntries,
     "  <url>",
     `    <loc>${SITE_ORIGIN}/api-docs</loc>`,
