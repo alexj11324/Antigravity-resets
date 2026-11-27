@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.mjs";
-import { pingIndexNow } from "../src/indexnow.mjs";
+import { pingIndexNow, redactApiKey } from "../src/indexnow.mjs";
 import { createMemoryD1 } from "./sqlite-d1.mjs";
 import { ensureSeeded } from "../src/store.mjs";
 
@@ -135,6 +135,14 @@ test("a success clears the backoff for the next reset", async () => {
     .prepare("SELECT value FROM site_state WHERE key = 'indexnow_last_attempt'")
     .first();
   assert.ok(!attempt, "a success must clear the backoff");
+});
+
+test("an API key cannot leak into a logged rejection body", () => {
+  assert.equal(
+    redactApiKey("boom: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=secret123&x=1"),
+    "boom: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=<redacted>&x=1",
+  );
+  assert.equal(redactApiKey(null), "");
 });
 
 test("without a key or database the ping is a no-op", async () => {

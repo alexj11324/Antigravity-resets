@@ -23,6 +23,16 @@ const ATTEMPT_KEY = "indexnow_last_attempt";
 const RETRY_AFTER_MS = 60 * 60 * 1000;
 
 /**
+ * Bing Webmaster takes its key as a query parameter, so any string that may be
+ * logged — an error message or a response body — must be scrubbed first.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function redactApiKey(value) {
+  return String(value ?? "").replace(/apikey=[^&\s"']+/gi, "apikey=<redacted>");
+}
+
+/**
  * Remember a failed attempt so the next tick does not hammer the endpoint.
  * @param {object} db
  */
@@ -138,7 +148,9 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
       body: request.body,
     });
   } catch (error) {
-    console.error("indexnow_failed", request.channel, error?.message || "network");
+    // error.message can embed the request URL on some runtimes, and the BWT
+    // URL carries the API key. Log the class name instead of the message.
+    console.error("indexnow_failed", request.channel, error?.name || "network");
     await recordAttempt(db);
     return { status: "error", detail: "network" };
   }
@@ -150,7 +162,7 @@ export async function pingIndexNow(env, fetchImpl = fetch) {
     // slice so a persistent rejection is diagnosable from the cron logs.
     let body = "";
     try {
-      body = (await response.text()).slice(0, 200);
+      body = redactApiKey((await response.text()).slice(0, 200));
     } catch {
       body = "";
     }
