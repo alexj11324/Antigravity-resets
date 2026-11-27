@@ -63,7 +63,7 @@ test("actual author expansion takes precedence over known fallback and unrelated
 });
 
 for (const reply of [false, true]) {
-  test(`signed Activity ${reply ? "reply" : "original"} without author expansion reaches Telegram once`, async () => {
+  test(`signed Activity ${reply ? "reply" : "original"} without author expansion reaches Telegram and X once`, async () => {
     const payload = event(reply ? {
       text: "Done",
       in_reply_to_tweet_id: "2130000000000000999",
@@ -84,9 +84,20 @@ for (const reply of [false, true]) {
       GEMINI_API_KEY: "mock_gemini_key",
       TELEGRAM_BOT_TOKEN: "mock_telegram_token",
       TELEGRAM_CHAT_ID: "-100999",
+      X_POST_API_KEY: "mock_x_key",
+      X_POST_API_KEY_SECRET: "mock_x_key_secret",
+      X_POST_ACCESS_TOKEN: "mock_x_token",
+      X_POST_ACCESS_TOKEN_SECRET: "mock_x_token_secret",
+      X_POSTS_START_AT: "2026-11-26T00:00:00Z",
       DB: createMemoryD1(),
       __fetchImpl: async (url, init) => {
+        if (url === "https://api.x.com/2/users/me") {
+          return Response.json({ data: { username: "agy_resets" } });
+        }
         calls.push({ url: String(url), body: JSON.parse(init.body) });
+        if (url === "https://api.x.com/2/tweets") {
+          return Response.json({ data: { id: "9001" } }, { status: 201 });
+        }
         if (String(url).includes("api.telegram.org")) {
           return Response.json({ ok: true, result: { message_id: 1 } });
         }
@@ -122,6 +133,8 @@ for (const reply of [false, true]) {
     assert.equal(first.status, 200);
     assert.equal((await first.json()).resetsRecorded, 1);
     assert.equal(calls.filter((call) => call.url.includes("api.telegram.org")).length, 1);
+    const xPost = calls.find((call) => call.url === "https://api.x.com/2/tweets");
+    assert.match(xPost?.body.text, /confirmed[\s\S]*x\.com\/_mohansolo\/status\/2130000000000001001/);
     const modelCalls = calls.filter((call) => call.url.includes("googleapis.com"));
     assert.equal(modelCalls.length, 2);
     if (reply) {
@@ -132,5 +145,6 @@ for (const reply of [false, true]) {
     assert.equal(duplicate.status, 200);
     assert.equal((await duplicate.json()).resetsRecorded, 0);
     assert.equal(calls.filter((call) => call.url.includes("api.telegram.org")).length, 1);
+    assert.equal(calls.filter((call) => call.url === "https://api.x.com/2/tweets").length, 1);
   });
 }

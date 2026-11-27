@@ -1,4 +1,5 @@
 import { drainTelegramOutbox } from "./telegram-outbox.mjs";
+import { drainXPosts } from "./x-posts.mjs";
 import {
   parseWebhookPayload,
   parseWatchedHandles,
@@ -480,6 +481,7 @@ export async function handleXWebhook(request, env, ctx) {
 
     if (ctx?.waitUntil) {
       ctx.waitUntil(drainTelegramOutbox(env, { fetchImpl }));
+      ctx.waitUntil(drainXPosts(env, { fetchImpl }));
       if (inserted.length > 0) {
         for (const reset of inserted) {
           ctx.waitUntil(notifyEmailSubscribers(env, reset, fetchImpl));
