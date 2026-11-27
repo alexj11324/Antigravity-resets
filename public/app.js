@@ -50,7 +50,7 @@ const state = {
     longestWaitDays: 0,
   },
   thanksCount: 0,
-  onlineCount: 1,
+  hasLiveData: false,
   browserFeedbackKey: null,
   emailFeedback: null, // { key, value? }
   heroTipLocked: false,
@@ -825,7 +825,6 @@ function render() {
 
   document.documentElement.lang = state.locale;
   els.siteTitle.textContent = c.siteName;
-  els.onlineCount.textContent = String(state.onlineCount);
   els.onlineLabel.textContent = c.hereNow;
 
   els.subtitle.innerHTML = `${c.subtitlePrefix} <a href="${OFFICIAL_ACCOUNTS.leadUrl}" target="_blank" rel="noopener noreferrer">${OFFICIAL_ACCOUNTS.leadHandle}</a> ${c.subtitleSuffix}`;
@@ -865,15 +864,17 @@ function render() {
   }
 
   els.thanksLabel.textContent = c.thanksBtn;
-  renderAnimatedCount(state.thanksCount, false);
 
   els.statResetsLabel.textContent = c.statResets;
-  els.statResetsVal.textContent = String(state.stats.totalResets);
   els.statAvgLabel.textContent = c.statAvg;
   els.statAvgShortLabel.textContent = c.statAvgShort;
-  els.statAvgVal.textContent = `${Number(state.stats.avgIntervalDays).toFixed(1)}${c.daysSuffix}`;
   els.statLongestLabel.textContent = c.statLongest;
-  els.statLongestVal.textContent = `${Number(state.stats.longestWaitDays).toFixed(1)}${c.daysSuffix}`;
+  if (state.hasLiveData) {
+    renderAnimatedCount(state.thanksCount, false);
+    els.statResetsVal.textContent = String(state.stats.totalResets);
+    els.statAvgVal.textContent = `${Number(state.stats.avgIntervalDays).toFixed(1)}${c.daysSuffix}`;
+    els.statLongestVal.textContent = `${Number(state.stats.longestWaitDays).toFixed(1)}${c.daysSuffix}`;
+  }
 
   els.tipCornerLabel.textContent = c.sponsorLabel;
   els.cliTipTitle.textContent = c.cliTipTitle;
@@ -965,7 +966,7 @@ async function fetchLiveData() {
   };
   state.thanksCount =
     (statusData.thanksCount ?? state.stats.latest?.thanksCount ?? 0) + pendingThanksDelta;
-  state.onlineCount = statusData.onlineCount ?? state.onlineCount;
+  state.hasLiveData = true;
   render();
 }
 
@@ -978,10 +979,8 @@ async function pingPresence() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (typeof data.onlineCount === "number") {
-        state.onlineCount = data.onlineCount;
-        els.onlineCount.textContent = String(state.onlineCount);
-      }
+      const count = data.onlineCount;
+      els.onlineCount.textContent = Number.isInteger(count) && count >= 0 ? String(count) : "—";
     }
   } catch {
     // non-fatal
@@ -1160,9 +1159,8 @@ els.heatmapScroll.addEventListener("scroll", hideCellTooltip, { passive: true })
 window.addEventListener("scroll", hideCellTooltip, { passive: true });
 
 applyTheme();
-fetchLiveData()
-  .then(() => pingPresence())
-  .catch(() => render());
+pingPresence();
+fetchLiveData().catch(() => render());
 
 setInterval(() => {
   if (state.stats.latest) {

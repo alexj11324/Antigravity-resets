@@ -158,7 +158,7 @@
                 <tr><td><code>stats.longestWaitDays</code></td><td>number</td><td>Longest gap on record.</td></tr>
                 <tr><td><code>stats.regularCount</code> / <code>bankedCount</code></td><td>number</td><td>Split by reset type.</td></tr>
                 <tr><td><code>thanksCount</code></td><td>number</td><td>Reactions recorded by this tracker, not by X.</td></tr>
-                <tr><td><code>onlineCount</code></td><td>number</td><td>Readers with the tracker open right now.</td></tr>
+                <tr><td><code>onlineCount</code></td><td>integer or null</td><td>Sessions active in the last 90 seconds. Null means the count is unavailable.</td></tr>
                 <tr><td><code>storage</code></td><td>string</td><td><code>d1</code> when reading the live database, <code>seed</code> when serving bundled data.</td></tr>
                 <tr><td><code>generatedAt</code></td><td>string</td><td>ISO 8601 timestamp for this response. It is excluded from the ETag.</td></tr>
               </tbody>

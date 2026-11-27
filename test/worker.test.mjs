@@ -9,6 +9,24 @@ const LEGACY_SECRET = "test_legacy_api_key_secret_value";
 const ADMIN_TOKEN = "test_admin_bearer_token";
 const GEMINI_KEY = "test_gemini_api_key";
 
+test("presence distinguishes an empty tracker from unavailable storage", async () => {
+  const origin = "https://antigravity-resets.com";
+  const status = (env) => worker.fetch(new Request(`${origin}/api/v1/status`), env);
+  const heartbeat = (sessionId, env) => worker.fetch(new Request(`${origin}/api/v1/presence`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  }), env);
+
+  assert.equal((await (await status({})).json()).onlineCount, null);
+  assert.equal((await (await heartbeat("viewer-a", {})).json()).onlineCount, null);
+
+  const env = { DB: createMemoryD1() };
+  assert.equal((await (await status(env)).json()).onlineCount, 0);
+  assert.equal((await (await heartbeat("viewer-a", env)).json()).onlineCount, 1);
+  assert.equal((await (await heartbeat("viewer-a", env)).json()).onlineCount, 1);
+  assert.equal((await (await heartbeat("viewer-b", env)).json()).onlineCount, 2);
+});
+
 function sign(secret, body) {
   const hmac = crypto.createHmac("sha256", secret).update(body).digest("base64");
   return `sha256=${hmac}`;

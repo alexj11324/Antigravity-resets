@@ -1,7 +1,6 @@
 import { SEED_RESETS } from "./seed-data.mjs";
 
 const PRESENCE_TTL_MS = 90 * 1000;
-const BASELINE_PRESENCE = 128;
 const seedQuotesByTweetId = new Map(SEED_RESETS.map(({ tweetId, quoteText }) => [tweetId, quoteText]));
 
 /**
@@ -500,7 +499,7 @@ export async function incrementThanks(db, resetId = null, delta = 1) {
 
 export async function recordPresence(db, sessionId) {
   if (!db) {
-    return { online: BASELINE_PRESENCE };
+    return { online: null };
   }
 
   const now = Date.now();
@@ -528,18 +527,17 @@ export async function recordPresence(db, sessionId) {
     .first();
 
   const active = Number(row?.count || 0);
-  return { online: Math.max(1, active) };
+  return { online: active };
 }
 
 export async function getOnlineCount(db) {
-  if (!db) return BASELINE_PRESENCE;
+  if (!db) return null;
   const cutoff = Date.now() - PRESENCE_TTL_MS;
   const row = await db
     .prepare("SELECT COUNT(*) AS count FROM presence_sessions WHERE last_seen >= ?")
     .bind(cutoff)
     .first();
-  const active = Number(row?.count || 0);
-  return active > 0 ? active : 1;
+  return Number(row?.count || 0);
 }
 
 export async function addEmailSubscription(db, { email, locale = "en", confirmed = 0 }) {
