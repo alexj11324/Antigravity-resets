@@ -138,6 +138,7 @@ const els = {
   footerLangs: document.getElementById("footerLangs"),
   footerDisclaimer: document.getElementById("footerDisclaimer"),
   apiDocsLink: document.getElementById("apiDocsLink"),
+  guideLink: document.getElementById("guideLink"),
   sponsorDialog: document.getElementById("sponsorDialog"),
   sponsorDialogTitle: document.getElementById("sponsorDialogTitle"),
   sponsorDialogDesc: document.getElementById("sponsorDialogDesc"),
@@ -426,19 +427,25 @@ function renderHeatmap() {
           `${dateLabel}: ${originalPostText(cellData.reset) || c.viewOnX}`,
         );
       } else {
-        cell = document.createElement("button");
-        cell.type = "button";
+        // A day without a reset is decoration, not a control. Rendering it as
+        // a button added ~180 focusable nodes that do nothing on click and
+        // failed the 24px touch-target check; the announcement list already
+        // carries every fact this grid visualizes.
+        cell = document.createElement("div");
         cell.className = "heat-cell";
+        cell.setAttribute("aria-hidden", "true");
         if (cellData.isFuture) cell.classList.add("is-future");
         if (cellData.isToday) cell.classList.add("is-today");
-        cell.setAttribute("aria-label", `${dateLabel}: ${c.tipQuietTitle}`);
       }
 
       if (!cellData.isFuture) {
         cell.addEventListener("mouseenter", () => showCellTooltip(cell, cellData));
-        cell.addEventListener("focus", () => showCellTooltip(cell, cellData));
         cell.addEventListener("mouseleave", hideCellTooltip);
-        cell.addEventListener("blur", hideCellTooltip);
+        // Only links are keyboard reachable, so only they can fire focus.
+        if (cell.tagName === "A") {
+          cell.addEventListener("focus", () => showCellTooltip(cell, cellData));
+          cell.addEventListener("blur", hideCellTooltip);
+        }
       }
 
       body.appendChild(cell);
@@ -825,6 +832,12 @@ function render() {
   els.tzPtBtn.setAttribute("aria-pressed", String(state.tzMode === "pt"));
   els.tzLocalBtn.setAttribute("aria-pressed", String(state.tzMode === "local"));
   els.mobileTzLabel.textContent = state.tzMode === "pt" ? c.tzVarun : c.tzLocal;
+  // The accessible name must contain the visible label, otherwise a screen
+  // reader announces something the sighted helper text does not show.
+  els.mobileTzBtn.setAttribute(
+    "aria-label",
+    `${c.tzSwitch}: ${els.mobileTzLabel.textContent}`,
+  );
 
   els.emailInput.placeholder = c.emailPlaceholder;
   els.emailSubmitBtn.textContent = c.emailBtn;
@@ -871,6 +884,8 @@ function render() {
 
   els.footerDisclaimer.textContent = c.footerDisclaimer;
   els.apiDocsLink.textContent = c.apiDocsLink;
+  els.guideLink.textContent = c.guideLink;
+  els.guideLink.href = state.locale === "en" ? "/guide" : `/${state.locale}/guide`;
 
   els.sponsorDialogTitle.textContent = c.advertiseModalTitle;
   els.sponsorDialogDesc.textContent = c.advertiseModalDesc;

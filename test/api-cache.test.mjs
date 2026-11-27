@@ -47,6 +47,18 @@ test("a different representation gets a different validator", async () => {
   assert.notEqual(all.headers.get("etag"), limited.headers.get("etag"));
 });
 
+test("a limited page still reports archive-wide statistics", async () => {
+  const all = await (await get("/api/v1/resets")).json();
+  const one = await (await get("/api/v1/resets?limit=1")).json();
+  assert.equal(one.count, 1);
+  assert.equal(
+    one.stats.totalResets,
+    all.stats.totalResets,
+    "limit paginates the response, it does not shrink the archive",
+  );
+  assert.equal(one.stats.avgIntervalDays, all.stats.avgIntervalDays);
+});
+
 test("HEAD returns the GET headers with no body", async () => {
   const res = await worker.fetch(
     new Request(`${SITE}/api/v1/status`, { method: "HEAD" }),

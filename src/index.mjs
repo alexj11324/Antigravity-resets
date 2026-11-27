@@ -1,7 +1,7 @@
 import { handleApiRequest } from "./api.mjs";
 import { handleXWebhook } from "./x-webhook.mjs";
 import { drainTelegramOutbox } from "./telegram-outbox.mjs";
-import { langFromPath } from "./seo-data.mjs";
+import { langFromPath, SITE_ORIGIN } from "./seo-data.mjs";
 import { handleHtmlRequest } from "./seo-html.mjs";
 import {
   renderLlmsTxt,
@@ -11,7 +11,7 @@ import {
 } from "./seo-text.mjs";
 import { handleMcpRequest } from "./mcp.mjs";
 import { buildOpenApi } from "./openapi.mjs";
-import { handleGuideRequest } from "./guide.mjs";
+import { handleGuideMarkdownRequest, handleGuideRequest } from "./guide.mjs";
 import { translatePendingResets } from "./translate.mjs";
 
 const APEX_HOST = "antigravity-resets.com";
@@ -85,6 +85,41 @@ const app = {
       });
     }
 
+    // RFC 9727 API catalog: one machine-readable place that points at the
+    // OpenAPI description, the human docs, and a live status representation.
+    if (pathname === "/.well-known/api-catalog") {
+      const linkset = {
+        linkset: [
+          {
+            anchor: `${SITE_ORIGIN}/api/v1`,
+            "service-desc": [
+              { href: `${SITE_ORIGIN}/api/openapi.json`, type: "application/json" },
+            ],
+            "service-doc": [{ href: `${SITE_ORIGIN}/api-docs`, type: "text/html" }],
+            status: [{ href: `${SITE_ORIGIN}/api/v1/status`, type: "application/json" }],
+          },
+        ],
+      };
+      return new Response(JSON.stringify(linkset), {
+        headers: {
+          "Content-Type":
+            'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    // The HTML reference should name its machine-readable sibling.
+    if (pathname === "/api-docs" && env?.ASSETS) {
+      const asset = await env.ASSETS.fetch(request);
+      const headers = new Headers(asset.headers);
+      headers.set(
+        "Link",
+        '</api/openapi.json>; rel="service-desc"; type="application/json"',
+      );
+      return new Response(asset.body, { status: asset.status, headers });
+    }
+
     if (
       pathname.startsWith("/api/") ||
       pathname === "/feed.xml" ||
@@ -127,6 +162,13 @@ const app = {
     if (markdownMatch) {
       const lang = markdownMatch[1] === "index" ? "en" : markdownMatch[1];
       return renderMarkdownResponse(env, lang);
+    }
+
+    // Each guide page advertises its own Markdown mirror; serving the homepage
+    // mirror from a guide URL made the alternate a lie for five URLs.
+    const guideMarkdownMatch = pathname.match(/^\/(?:(zh-CN|zh-TW|ja|ko)\/)?guide\.md$/);
+    if (guideMarkdownMatch) {
+      return handleGuideMarkdownRequest(guideMarkdownMatch[1] || "en");
     }
 
     if (pathname === "/guide" || /^\/(zh-CN|zh-TW|ja|ko)\/guide$/.test(pathname)) {

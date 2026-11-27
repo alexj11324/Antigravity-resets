@@ -583,11 +583,13 @@ async function handleApiRequestUncached(request, env) {
       Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 200
         ? limitParam
         : null;
-    const resets = await listResets(env?.DB, {
-      type: typeParam === "regular" || typeParam === "banked" ? typeParam : null,
-      limit,
-    });
-    const stats = computeStats(resets);
+    const type = typeParam === "regular" || typeParam === "banked" ? typeParam : null;
+    // Statistics describe the archive, not the slice this request asked for:
+    // ?limit=1 must not claim the tracker has recorded a single reset. Fetch
+    // the full (optionally type-filtered) list and slice it for the response.
+    const archive = await listResets(env?.DB, { type });
+    const resets = limit ? archive.slice(0, limit) : archive;
+    const stats = computeStats(archive);
     return cachedJson(
       request,
       {

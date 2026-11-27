@@ -186,6 +186,26 @@ const COPY = {
 };
 
 /**
+ * Markdown mirror of a guide page, so an agent that asks for the alternates
+ * gets this page's own content instead of the homepage mirror.
+ * @param {string} lang
+ * @returns {string}
+ */
+export function renderGuideMarkdown(lang) {
+  const copy = COPY[lang] || COPY.en;
+  const canonical = `${SITE_ORIGIN}${GUIDE_PATH[lang] || GUIDE_PATH.en}`;
+  return [
+    `# ${copy.title}`,
+    "",
+    copy.intro,
+    "",
+    ...copy.sections.flatMap((section) => [`## ${section.h}`, "", section.p, ""]),
+    `[${copy.back}](${canonical})`,
+    "",
+  ].join("\n");
+}
+
+/**
  * @param {string} pathname
  * @returns {string} locale code for a guide path
  */
@@ -278,10 +298,9 @@ export function handleGuideRequest(request, env, pathname) {
     <link rel="manifest" href="/manifest.json" />
     <script type="application/ld+json">${jsonForScript(article)}</script>
     <link rel="alternate" type="application/rss+xml" title="Antigravity Resets RSS" href="${SITE_ORIGIN}/feed.xml" />
-    <link rel="alternate" type="text/markdown" title="Markdown" href="${SITE_ORIGIN}/index.md" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="alternate" type="text/markdown" title="Markdown" href="${SITE_ORIGIN}${lang === "en" ? "/guide.md" : `/${lang}/guide.md`}" />
+    <link rel="preload" href="/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -318,6 +337,22 @@ export function handleGuideRequest(request, env, pathname) {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Language": lang,
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+    },
+  });
+}
+
+/**
+ * Serve the Markdown mirror of a guide page.
+ * @param {string} lang
+ * @returns {Response}
+ */
+export function handleGuideMarkdownRequest(lang) {
+  const resolved = GUIDE_PATH[lang] ? lang : "en";
+  return new Response(renderGuideMarkdown(resolved), {
+    headers: {
+      "Content-Type": "text/markdown; charset=utf-8",
+      "Content-Language": resolved,
       "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
     },
   });

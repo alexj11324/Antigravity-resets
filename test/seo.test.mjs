@@ -197,6 +197,36 @@ test("safeHttpsUrl only admits absolute https URLs", async () => {
   assert.equal(safeHttpsUrl(null), "");
 });
 
+test("each guide page points at its own Markdown mirror and that mirror exists", async () => {
+  for (const [path, md] of [
+    ["/guide", "/guide.md"],
+    ["/zh-CN/guide", "/zh-CN/guide.md"],
+    ["/ja/guide", "/ja/guide.md"],
+    ["/ko/guide", "/ko/guide.md"],
+  ]) {
+    const html = await (await worker.fetch(new Request(`${SITE}${path}`), env, ctx)).text();
+    assert.match(
+      html,
+      new RegExp(`href="${SITE.replace(/\./g, "\\.")}${md.replace(/\//g, "\\/")}"`),
+      `${path} must advertise its own Markdown mirror`,
+    );
+    const mirror = await worker.fetch(new Request(`${SITE}${md}`), env, ctx);
+    assert.equal(mirror.status, 200, `${md} must exist`);
+    assert.match(mirror.headers.get("content-type"), /text\/markdown/);
+    assert.match(await mirror.text(), /^# /, `${md} must carry the guide content`);
+  }
+});
+
+test("the API catalog points at the OpenAPI document and the human docs", async () => {
+  const res = await worker.fetch(new Request(`${SITE}/.well-known/api-catalog`), env, ctx);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /application\/linkset\+json/);
+  const body = await res.json();
+  const link = body.linkset[0];
+  assert.equal(link["service-desc"][0].href, `${SITE}/api/openapi.json`);
+  assert.equal(link["service-doc"][0].href, `${SITE}/api-docs`);
+});
+
 test("original posts cannot break out of the Markdown document", async () => {
   const { buildAnnouncementsMarkdown } = await import("../src/seo-text.mjs");
   assert.equal(typeof buildAnnouncementsMarkdown, "function");
