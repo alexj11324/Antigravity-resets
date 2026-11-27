@@ -1388,6 +1388,8 @@ div.heat-cell {
 .faq-list {
   margin-top: 14px;
   border-top: 2px solid var(--border);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .faq-item {
