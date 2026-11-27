@@ -130,4 +130,8 @@
 - [x] 生产上线：`/{key}.txt` 200、`/history` 200、sitemap 18 条、llms.txt 本地化镜像
 - [x] 评审跟进（PR #23）：按 locale 断言 language/canonical/mirror、Markdown 转义、5s 超时、先 drain 用户告警、site_state 缺失日志
 - [x] GSC 重新提交 18 URL sitemap（2026-11-27T01:39Z，0 错误 / 0 警告，待重新下载）
-- [ ] 剩余低优先级：`http://www` 两跳收敛为一条 Redirect Rule；静态资源缓存头
+- [x] `http://www` 收敛为一跳（Redirect Rule，GET/HEAD 301；POST 仍走 Worker 308）
+- [x] 静态资源保持 `max-age=0, must-revalidate` + 强 ETag（文件名无内容哈希，长缓存会拿到旧 JS/CSS，属有意选择）
+- [x] IndexNow 匿名通道被出口 IP 限流（429 TooManyRequests，无 Retry-After）→ 失败退避 1 小时、成功才写水位
+- [x] 认证式通道：设置 `BING_WEBMASTER_API_KEY` 后优先走 Bing Webmaster SubmitUrlbatch；日志对 key 脱敏
+- [ ] 待账号操作：Bing Webmaster 验证站点并设置 `BING_WEBMASTER_API_KEY`（key 到位后自动启用，无需改代码）
