@@ -7,10 +7,12 @@ const DEVELOPER_ORGANIZATION = Object.freeze({
   name: SITE_NAME,
   url: `${SITE_ORIGIN}/`,
   // sameAs asserts "this is the same entity", not "related to". It may only
-  // list channels this site operates. @_mohansolo is the person being tracked,
-  // and t.me/antigravity_resets is not the alert channel the UI links to; the
-  // site has no X account of its own.
-  sameAs: ["https://t.me/antigravity_resets_alert"],
+  // list channels this site operates: our own X account and the public alert
+  // channel. @_mohansolo is the person being tracked, so he never appears here.
+  sameAs: [
+    "https://x.com/agy_resets",
+    "https://t.me/antigravity_resets_alert",
+  ],
   disambiguatingDescription:
     "Independent community tracker of publicly announced Google Antigravity quota resets; not affiliated with Google DeepMind or Google Antigravity.",
 });
